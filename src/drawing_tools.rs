@@ -33,16 +33,6 @@ impl std::ops::Div<f64> for Point {
    } 
 }
 
-fn subtract_points(p1: Point, p2:Point) -> Point {
-    return Point(p1.0 - p2.0, p1.1 - p2.1);
-}
-
-pub enum CurrentDrawingTool {
-    NormalLine,
-    NormalArrow,
-    NormalRectangle
-}
-
 pub trait DrawingTool {
     fn release_mouse(&mut self, point: Point);
     fn press_mouse(&mut self, point: Point);
@@ -109,6 +99,7 @@ impl DrawingTool for NormalLine {
             for chunk in self.points.windows(4) {
                 match chunk {
                     [p1, p2, p3, p4] => {
+                        // these are our 2 control points
                         let (f1, f2) = calc_centripetal_catmullrom_spline(p1,p2,p3,p4);
                         ctx.curve_to(f1.0, f1.1,
                                      f2.0, f2.1,
@@ -129,133 +120,4 @@ impl DrawingTool for NormalLine {
         self.line_width = width;
     } 
 }
-/*
- pub struct NormalRectangle {
-    start: Option<(f64, f64)>,
-    end: Option<(f64, f64)>,
-    started: bool,
-    finished: bool,
-}
 
-impl NormalRectangle {
-    pub fn new() -> NormalRectangle {
-        NormalRectangle { start: None, end: None, started: false, finished: false }
-    }
-}
-
-impl DrawingTool for NormalRectangle {
-
-    fn release_mouse(&mut self, event: &EventButton) {
-        self.finished = true;
-        self.end = Some(event.position());
-    }
-
-    fn press_mouse(&mut self, event: &EventButton) {
-        self.started = true;
-        self.start = Some(event.position());
-    }
-
-    fn motion_notify(&mut self, da: &DrawingArea, event: &EventMotion) {
-        if !self.finished {
-            self.end = Some(event.position());
-            da.queue_draw();
-        }
-    }
-
-    fn draw(&self, ctx: &Context) {
-        if self.started {
-            
-            ctx.set_line_width(2.0);
-
-            if let (Some(start), Some(end)) = (self.start, self.end) {
-                ctx.rectangle(
-                    f64::min(start.0, end.0), 
-                    f64::min(start.1, end.1), 
-                    (end.0 - start.0).abs(),
-                    (end.1 - start.1).abs());
-            } 
-           
-            match ctx.stroke() {
-                Err(e) => println!("{e}"),
-                _ => ()
-            }
-        }
-    }
-}
-
-pub struct NormalArrow {
-    start: Option<(f64, f64)>,
-    end: Option<(f64, f64)>,
-    arrow_length: f64,
-    arrow_degree: f64,
-    started: bool,
-    finished: bool,
-}
-
-impl NormalArrow {
-    pub fn new() -> NormalArrow {
-        NormalArrow {
-            start: None,
-            end: None,
-            arrow_length: 20.0,
-            started: false,
-            finished: false,
-            arrow_degree: 0.58067840828
-        }
-    }
-}
-
-impl DrawingTool for NormalArrow {
-
-    fn release_mouse(&mut self, event: &EventButton) {
-        self.finished = true;
-        self.end = Some(event.position());
-    }
-
-    fn press_mouse(&mut self, event: &EventButton) {
-        self.started = true;
-        self.start = Some(event.position());
-    }
-
-    fn motion_notify(&mut self, da: &DrawingArea , event: &EventMotion) {
-        if !self.finished {
-            self.end = Some(event.position());
-            da.queue_draw();
-        }
-    }
-
-    fn draw(&self, ctx: &Context) {
-        if self.started {
-            ctx.set_line_width(2.0);
-            if let (Some(start), Some(end)) = (self.start, self.end) {
-
-                ctx.move_to(start.0, start.1);
-                ctx.line_to(end.0, end.1);
-                
-                let angle_main_line = (end.1 - start.1).atan2(end.0 - start.0);
-
-                let (x1, y1): (f64, f64);
-
-                let (x2, y2): (f64, f64);
-
-                x1 = start.0 + self.arrow_length * (angle_main_line - self.arrow_degree).cos();
-                y1 = start.1 + self.arrow_length * (angle_main_line - self.arrow_degree).sin();
-                x2 = start.0 + self.arrow_length * (angle_main_line + self.arrow_degree).cos();
-                y2 = start.1 + self.arrow_length * (angle_main_line + self.arrow_degree).sin();
-
-                ctx.move_to(start.0, start.1);
-                ctx.line_to(x1, y1);
-
-                ctx.move_to(start.0, start.1);
-                ctx.line_to(x2, y2);
-
-                match ctx.stroke() {
-                    Err(e) => println!("{e}"),
-                    _ => ()
-                }
-            }
-        }
-
-    }
-}
-*/

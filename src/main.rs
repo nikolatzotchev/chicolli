@@ -1,6 +1,5 @@
 use std::{rc::Rc, cell::RefCell};
 
-use drawing_tools::DrawingTool;
 use gtk4 as gtk;
 use gio::{prelude::*, glib};
 use gtk::{prelude::*, gdk::Display, Inhibit};
@@ -90,7 +89,6 @@ fn activate(application: &gtk::Application) {
     // Assign your handler to an event of the gesture (e.g. the `pressed` event)
     left_click_mouse.connect_pressed(move |_, _, x, y| {
         let mut drawing_tool: Box<dyn drawing_tools::DrawingTool> = Box::new(drawing_tools::NormalLine::new());
-        println!("{}, {}", x, y);
         drawing_tool.press_mouse(drawing_tools::Point(x, y));
         drawing_tool.set_line_width(*line_width_draw_copy.borrow());
         elements_mouse_1_press_copy.borrow_mut().push(drawing_tool);
