@@ -1,7 +1,41 @@
 use gtk4::cairo::Context;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Copy)]
 pub struct Point(pub f64,pub f64);
+
+impl std::ops::Add<Point> for Point {
+    type Output = Point;
+
+    fn add(self, rhs: Point) -> Self::Output {
+        Point(self.0 + rhs.0, self.1 + rhs.1)
+    }
+}
+impl std::ops::Sub<Point> for Point {
+    type Output = Point;
+
+    fn sub(self, rhs: Point) -> Self::Output {
+        Point(self.0 - rhs.0, self.1 - rhs.1)
+    }
+}
+impl std::ops::Mul<f64> for Point {
+   type Output = Point;
+
+   fn mul(self, rhs: f64) -> Self::Output {
+       Point(self.0 * rhs, self.1 * rhs)
+   } 
+}
+
+impl std::ops::Div<f64> for Point {
+   type Output = Point;
+
+   fn div(self, rhs: f64) -> Self::Output {
+       Point(self.0 / rhs, self.1 / rhs)
+   } 
+}
+
+fn subtract_points(p1: Point, p2:Point) -> Point {
+    return Point(p1.0 - p2.0, p1.1 - p2.1);
+}
 
 pub enum CurrentDrawingTool {
     NormalLine,
@@ -35,6 +69,20 @@ impl NormalLine {
     }
 }
 
+pub fn calc_centripetal_catmullrom_spline(p0: &Point, p1: &Point, p2: &Point, p3: &Point) -> (Point, Point) {
+
+    let d_0 = (*p1 - *p0) / 3.0;
+    let d_3 = (*p3 - *p2) / 3.0;
+    let b_1 = -0.25;
+    let b_2 = -1.0 / (4.0 + b_1);
+    let a_1 = (*p2 - *p0 - d_0) / 4.0;
+    let a_2 = (*p3 - *p1 - a_1) / (4.0 + b_1);
+    
+    let d_2 = a_2 + d_3 * b_2;
+    let d_1 = a_1 + d_2 * b_1 ;
+    (*p1+d_1, *p2-d_2)
+}
+
 impl DrawingTool for NormalLine {
     fn release_mouse(&mut self, _: Point) {
         self.finished = true;
@@ -55,45 +103,20 @@ impl DrawingTool for NormalLine {
         if let Some(last) = self.points.first() {
             // this makes corners round 
             ctx.set_line_cap(gtk4::cairo::LineCap::Round); 
+            ctx.set_line_join(gtk4::cairo::LineJoin::Round);
             ctx.move_to(last.0, last.1);
-            let mut prev = last;
-            for chunk in self.points.chunks(3) {
+            
+            for chunk in self.points.windows(4) {
                 match chunk {
-                    [p1] => ctx.line_to(p1.0, p1.1),
-                    [p1, p2] => ctx.curve_to(p1.0, p1.1, p1.0, p1.1, p2.0, p2.1),
-                    [p1, p2, p3] => {
-                        let mut first_bezier = p1.clone();
-                        let mut second_bezier = p2.clone();
-                        if p1.0 > prev.0 {
-                            first_bezier.0 += 10.0;
-                        } else {
-                            first_bezier.0 -= 10.0;
-                        }
-                        if p1.1 > prev.1 {
-                            first_bezier.1 += 10.0;
-                        } else {
-                            first_bezier.1 -= 10.0;
-                        }
-
-                        if p2.0 > p3.0 {
-                            second_bezier.0 += 10.0;
-                        } else {
-                            second_bezier.0 -= 10.0;
-                        }
-                        if p2.1 > p3.1  {
-                            second_bezier.1 += 10.0;
-                        } else {
-                            second_bezier.1 -= 10.0;
-                        }
-                        ctx.curve_to(first_bezier.0, first_bezier.1, second_bezier.0, second_bezier.1, p3.0, p3.1)
+                    [p1, p2, p3, p4] => {
+                        let (f1, f2) = calc_centripetal_catmullrom_spline(p1,p2,p3,p4);
+                        ctx.curve_to(f1.0, f1.1,
+                                     f2.0, f2.1,
+                                     p3.0, p3.1);
                     },
-                    _ => unreachable!()
-                }
-                if let Some(a) = chunk.last() {
-                    prev = a;
+                    _ => unreachable!(),
                 }
             }
-            ctx.set_line_join(gtk4::cairo::LineJoin::Round);
 
             match ctx.stroke() {
                 Err(e) => println!("{e}"),
