@@ -45,7 +45,8 @@ pub struct NormalLine {
     points: Vec<Point>,
     finished: bool,
     started: bool,
-    line_width: f64
+    line_width: f64,
+    color: (f64, f64, f64)
 }
 
 impl NormalLine {
@@ -54,12 +55,13 @@ impl NormalLine {
             points: Vec::new(),
             finished: false,
             started: false,
-            line_width: 2.0 
+            line_width: 2.0,
+            color: (255.0, 0.0, 0.0)
         }
     }
 }
 
-pub fn calc_centripetal_catmullrom_spline(p0: &Point, p1: &Point, p2: &Point, p3: &Point) -> (Point, Point) {
+pub fn calc_spline(p0: &Point, p1: &Point, p2: &Point, p3: &Point) -> (Point, Point) {
 
     let d_0 = (*p1 - *p0) / 3.0;
     let d_3 = (*p3 - *p2) / 3.0;
@@ -90,30 +92,36 @@ impl DrawingTool for NormalLine {
 
     fn draw(&self, ctx: &Context) -> () {
         ctx.set_line_width(self.line_width);
-        if let Some(last) = self.points.first() {
-            // this makes corners round 
-            ctx.set_line_cap(gtk4::cairo::LineCap::Round); 
-            ctx.set_line_join(gtk4::cairo::LineJoin::Round);
-            ctx.move_to(last.0, last.1);
-            
-            for chunk in self.points.windows(4) {
-                match chunk {
-                    [p1, p2, p3, p4] => {
-                        // these are our 2 control points
-                        let (f1, f2) = calc_centripetal_catmullrom_spline(p1,p2,p3,p4);
-                        ctx.curve_to(f1.0, f1.1,
-                                     f2.0, f2.1,
-                                     p3.0, p3.1);
-                    },
-                    _ => unreachable!(),
-                }
-            }
+        ctx.set_line_cap(gtk4::cairo::LineCap::Round); 
+        ctx.set_line_join(gtk4::cairo::LineJoin::Round);
+        if self.points.len() > 1 {
+            let (first_two, _) = self.points.split_at(2);
+            match first_two {
+                [p1, p2] => {
+                    ctx.move_to(p1.0, p1.1);
+                    ctx.line_to(p2.0, p2.1);
 
-            match ctx.stroke() {
-                Err(e) => println!("{e}"),
+                    for chunk in self.points.windows(4) {
+                        match chunk {
+                            // we draw the spline between p2 and p3
+                            [p1, p2, p3, p4] => {
+                                // these are our 2 control points
+                                let (f1, f2) = calc_spline(p1,p2,p3,p4);
+                                ctx.curve_to(f1.0, f1.1,
+                                             f2.0, f2.1,
+                                             p3.0, p3.1);
+                            },
+                            _ => unreachable!(),
+                        }
+                    }
+                    match ctx.stroke() {
+                        Err(e) => panic!("{e}"),
+                        _ => ()
+                    }
+                }
                 _ => ()
             }
-        }
+        } 
     }
 
     fn set_line_width(&mut self, width: f64) {
