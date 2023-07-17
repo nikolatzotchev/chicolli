@@ -1,5 +1,7 @@
 use gtk4::cairo::Context;
 
+use crate::colors;
+
 #[derive(Clone, Debug, Copy)]
 pub struct Point(pub f64,pub f64);
 
@@ -39,6 +41,7 @@ pub trait DrawingTool {
     fn motion_notify(&mut self, point: Point);
     fn draw(&self, cnx: &Context);
     fn set_line_width(&mut self, width: f64);
+    fn set_color(&mut self, color: colors::Color);
 }
 
 pub struct NormalLine {
@@ -46,7 +49,7 @@ pub struct NormalLine {
     finished: bool,
     started: bool,
     line_width: f64,
-    color: (f64, f64, f64)
+    color: colors::Color
 }
 
 impl NormalLine {
@@ -56,7 +59,7 @@ impl NormalLine {
             finished: false,
             started: false,
             line_width: 2.0,
-            color: (255.0, 0.0, 0.0)
+            color: colors::RED
         }
     }
 }
@@ -91,9 +94,13 @@ impl DrawingTool for NormalLine {
     }
 
     fn draw(&self, ctx: &Context) -> () {
+       
+        let color = self.color;
+        ctx.set_source_rgb(color.0, color.1, color.2);
         ctx.set_line_width(self.line_width);
         ctx.set_line_cap(gtk4::cairo::LineCap::Round); 
         ctx.set_line_join(gtk4::cairo::LineJoin::Round);
+        
         if self.points.len() > 1 {
             let (first_two, _) = self.points.split_at(2);
             match first_two {
@@ -127,5 +134,9 @@ impl DrawingTool for NormalLine {
     fn set_line_width(&mut self, width: f64) {
         self.line_width = width;
     } 
+
+    fn set_color(&mut self, color: colors::Color) {
+        self.color = color;
+    }
 }
 

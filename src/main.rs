@@ -5,6 +5,7 @@ use gio::{prelude::*, glib};
 use gtk::{prelude::*, gdk::Display, Inhibit};
 
 mod drawing_tools;
+mod colors;
 // https://github.com/wmww/gtk-layer-shell/blob/master/examples/simple-example.c
 fn activate(application: &gtk::Application) {
     // Create a normal GTK window however you like
@@ -42,6 +43,9 @@ fn activate(application: &gtk::Application) {
     let elements_mouse_2_press_copy = elements.clone();
     let elements_motion_copy = elements.clone();
 
+    let color = Rc::new(RefCell::new(colors::RED));
+    let color_copy_change = color.clone();
+
     // Set up a widget
     let draw = gtk::DrawingArea::new();
 
@@ -57,12 +61,25 @@ fn activate(application: &gtk::Application) {
 
     let key_controller = gtk::EventControllerKey::new();
 
-    key_controller.connect_key_pressed(|_, keyval, _ , _| {
+    key_controller.connect_key_pressed(move |_, keyval, key_number , _| {
         println!( "Key pressed: keyval={}", keyval);
+        println!( "Key number = {}", key_number);
+        match key_number {
+            // r for red
+            27 => *color_copy_change.borrow_mut() = colors::RED,
+            // g for green 
+            42 => *color_copy_change.borrow_mut() = colors::GREEN,
+            // b for blue
+            56 => *color_copy_change.borrow_mut() = colors::BLUE,
+            // can add more later
+            _ => ()
+        };
         gtk::Inhibit(false)
     });
 
-    // draw.add_controller(key_controller);
+    // key controller is added to the window and not to the drawarea because there it does not
+    // work
+    window.add_controller(key_controller); 
    
     let right_click_mouse = gtk::GestureClick::new();
 
@@ -91,6 +108,7 @@ fn activate(application: &gtk::Application) {
         let mut drawing_tool: Box<dyn drawing_tools::DrawingTool> = Box::new(drawing_tools::NormalLine::new());
         drawing_tool.press_mouse(drawing_tools::Point(x, y));
         drawing_tool.set_line_width(*line_width_draw_copy.borrow());
+        drawing_tool.set_color(*color.borrow());
         elements_mouse_1_press_copy.borrow_mut().push(drawing_tool);
     });
 
@@ -101,15 +119,10 @@ fn activate(application: &gtk::Application) {
     });
 
     draw.add_controller(left_click_mouse);
-
-
-
-
+ 
     // scrool controller 
     let scrool_controller = gtk::EventControllerScroll::new(gtk::EventControllerScrollFlags::BOTH_AXES);
     
-
-
     scrool_controller.connect_scroll(move |_, _,  scrool| {
         let p:i32 = scrool as i32;
         let mut width = line_width_scrool_copy.borrow_mut();
@@ -129,22 +142,8 @@ fn activate(application: &gtk::Application) {
 
     draw.add_controller(scrool_controller);
 
-    // draw.add_controller(gesture);
-
-    // let gesture = gtk::GestureClick::new();
-    //
-    // gesture.set_button(10);
-    //
-    // gesture.connect_pressed(|gesture, _, _, _| {
-    //     gesture.set_state(gtk::EventSequenceState::Claimed);
-    //     println!("Right mouse button pressed!");
-    //     std::process::exit(1);
-    // });
-    //
-    // draw.add_controller(gesture);
     draw.set_draw_func(move |_, ctx, _, _| {
-        // hardcoded color red
-        ctx.set_source_rgb(255.0, 0.0, 0.0);
+
         for element in elements_draw_copy.borrow_mut().iter() {
             element.draw(ctx); 
         }
@@ -159,7 +158,6 @@ fn activate(application: &gtk::Application) {
     provider.load_from_data(include_str!("style.css"));
     gtk::style_context_add_provider_for_display(&Display::default().expect("error getting default display"), &provider, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
 
-    window.add_controller(key_controller); 
     window.set_child(Some(&draw));
     window.show();
   }
