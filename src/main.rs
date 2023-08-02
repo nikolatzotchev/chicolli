@@ -1,10 +1,9 @@
 use std::{rc::Rc, cell::RefCell};
-
 use gtk4 as gtk;
 use gio::{prelude::*, glib};
 use gtk::{prelude::*, gdk::Display, Inhibit};
 
-mod drawing_tools;
+pub mod drawing;
 pub mod colors;
 // https://github.com/wmww/gtk-layer-shell/blob/master/examples/simple-example.c
 fn activate(application: &gtk::Application) {
@@ -30,7 +29,7 @@ fn activate(application: &gtk::Application) {
     }
 
     // main components
-    let elements: Rc<RefCell<Vec<Box<dyn drawing_tools::DrawingTool>>>> = Rc::new(RefCell::new(Vec::new()));
+    let elements: Rc<RefCell<Vec<Box<dyn drawing::drawing_tool::DrawingTool>>>> = Rc::new(RefCell::new(Vec::new()));
     let elements_draw_copy = elements.clone();
     let elements_mouse_1_press_copy = elements.clone();
     let elements_mouse_2_press_copy = elements.clone();
@@ -45,7 +44,7 @@ fn activate(application: &gtk::Application) {
     let motion_controller =  gtk::EventControllerMotion::new();
     motion_controller.connect_motion(glib::clone!(@weak draw => move |_, x, y| {
         if let Some(elem) = elements_motion_copy.borrow_mut().last_mut() {
-            elem.motion_notify(drawing_tools::Point(x, y));
+            elem.motion_notify(drawing::drawing_tool::Point(x, y));
             if elem.active() {
                  draw.queue_draw();
             }
@@ -100,8 +99,8 @@ fn activate(application: &gtk::Application) {
    
     // Assign your handler to an event of the gesture (e.g. the `pressed` event)
     left_click_mouse.connect_pressed(move |_, _, x, y| {
-        let mut drawing_tool: Box<dyn drawing_tools::DrawingTool> = Box::new(drawing_tools::NormalLine::new());
-        drawing_tool.press_mouse(drawing_tools::Point(x, y));
+        let mut drawing_tool: Box<dyn drawing::drawing_tool::DrawingTool> = Box::new(drawing::normal_line::NormalLine::new());
+        drawing_tool.press_mouse(drawing::drawing_tool::Point(x, y));
         drawing_tool.set_line_width(*line_width_draw_copy.borrow());
         drawing_tool.set_color(*color.borrow());
         elements_mouse_1_press_copy.borrow_mut().push(drawing_tool);
@@ -109,7 +108,7 @@ fn activate(application: &gtk::Application) {
 
     left_click_mouse.connect_released(move |_, _, x, y| {
         if let Some(elem) = elements_mouse_2_press_copy.borrow_mut().last_mut() {
-            elem.release_mouse(drawing_tools::Point(x, y));
+            elem.release_mouse(drawing::drawing_tool::Point(x, y));
         }
     });
 

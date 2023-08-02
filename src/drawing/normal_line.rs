@@ -2,56 +2,7 @@ use gtk4::cairo::Context;
 
 use crate::colors;
 
-#[derive(Clone, Debug, Copy)]
-pub struct Point(pub f64,pub f64);
-
-impl std::ops::Add<Point> for Point {
-    type Output = Point;
-
-    fn add(self, rhs: Point) -> Self::Output {
-        Point(self.0 + rhs.0, self.1 + rhs.1)
-    }
-}
-impl std::ops::Sub<Point> for Point {
-    type Output = Point;
-
-    fn sub(self, rhs: Point) -> Self::Output {
-        Point(self.0 - rhs.0, self.1 - rhs.1)
-    }
-}
-impl std::ops::Mul<f64> for Point {
-   type Output = Point;
-
-   fn mul(self, rhs: f64) -> Self::Output {
-       Point(self.0 * rhs, self.1 * rhs)
-   } 
-}
-
-impl std::ops::Div<f64> for Point {
-   type Output = Point;
-
-   fn div(self, rhs: f64) -> Self::Output {
-       Point(self.0 / rhs, self.1 / rhs)
-   } 
-}
-
-impl std::ops::Neg for Point{
-    type Output = Point;
-
-    fn neg(self) -> Point{
-        Point(-self.0, -self.1)
-    }
-}
-
-pub trait DrawingTool {
-    fn release_mouse(&mut self, point: Point);
-    fn press_mouse(&mut self, point: Point);
-    fn motion_notify(&mut self, point: Point);
-    fn draw(&self, cnx: &Context);
-    fn set_line_width(&mut self, width: f64);
-    fn set_color(&mut self, color: colors::Color);
-    fn active(&mut self) -> bool;
-}
+use super::drawing_tool::{Point, DrawingTool};
 
 pub struct NormalLine {
     points: Vec<Point>,
@@ -84,11 +35,10 @@ pub fn calc_whole_spline(points: &Vec<Point>) -> Vec<Point> {
     let mut b = vec![0.0; num_points];
     b[1] = -0.25;
     let mut d = vec![Point(0.0, 0.0); num_points];
+    // maybe try to set these values better in the future
+    d[0] = (points[1] - points[0]) / 3.0;
+    d[num_points - 1] = (points[num_points - 1] - points[num_points - 2]) / 3.0;
     
-    let d_0 = (points[1] - points[0]) / 3.0;
-    let d_n = (points[num_points - 1] - points[num_points - 2]) / 3.0;
-    d[0] = d_0;
-    d[num_points - 1] = d_n;
     a[1] = (points[2] - points[0] - d[0]) / 4.0;
     for i in 2..num_points-1 {
         b[i] = -1.0/(4.0 + b[i-1]);
@@ -154,4 +104,5 @@ impl DrawingTool for NormalLine {
        return self.started && !self.finished; 
     }
 }
+
 
