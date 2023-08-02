@@ -150,7 +150,7 @@ fn activate(application: &gtk::Application) {
 
     // load css for the transparency of the window
     let provider = gtk::CssProvider::new();
-    provider.load_from_data(include_str!("style.css"));
+    provider.load_from_data(include_str!("styles/style.css"));
     gtk::style_context_add_provider_for_display(&Display::default().expect("error getting default display"), &provider, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
 
     window.set_child(Some(&draw));
