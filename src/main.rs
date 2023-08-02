@@ -5,7 +5,7 @@ use gio::{prelude::*, glib};
 use gtk::{prelude::*, gdk::Display, Inhibit};
 
 mod drawing_tools;
-mod colors;
+pub mod colors;
 // https://github.com/wmww/gtk-layer-shell/blob/master/examples/simple-example.c
 fn activate(application: &gtk::Application) {
     // Create a normal GTK window however you like
@@ -16,13 +16,6 @@ fn activate(application: &gtk::Application) {
     gtk4_layer_shell::set_keyboard_mode(&window, gtk4_layer_shell::KeyboardMode::Exclusive);
     // Display above normal windows
     gtk4_layer_shell::set_layer(&window, gtk4_layer_shell::Layer::Overlay);
-
-
-    // The margins are the gaps around the window's edges
-    // Margins and anchors can be set like this...
-    // gtk4_layer_shell::set_margin(&window, gtk4_layer_shell::Edge::Left, 40);
-    // gtk4_layer_shell::set_margin(&window, gtk4_layer_shell::Edge::Right, 40);
-    // gtk4_layer_shell::set_margin(&window, gtk4_layer_shell::Edge::Top, 20);
 
     // Anchors are if the window is pinned to each edge of the output
     let anchors = [
@@ -53,8 +46,10 @@ fn activate(application: &gtk::Application) {
     motion_controller.connect_motion(glib::clone!(@weak draw => move |_, x, y| {
         if let Some(elem) = elements_motion_copy.borrow_mut().last_mut() {
             elem.motion_notify(drawing_tools::Point(x, y));
+            if elem.active() {
+                 draw.queue_draw();
+            }
         }
-        draw.queue_draw();
     }));
 
     draw.add_controller(motion_controller);
@@ -134,7 +129,7 @@ fn activate(application: &gtk::Application) {
                 }
             }, 
             -1 =>  *width += 1.0,
-            _ => print!("nono")
+            _ => ()
 
         }
         Inhibit(false)

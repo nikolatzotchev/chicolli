@@ -35,6 +35,14 @@ impl std::ops::Div<f64> for Point {
    } 
 }
 
+impl std::ops::Neg for Point{
+    type Output = Point;
+
+    fn neg(self) -> Point{
+        Point(-self.0, -self.1)
+    }
+}
+
 pub trait DrawingTool {
     fn release_mouse(&mut self, point: Point);
     fn press_mouse(&mut self, point: Point);
@@ -42,6 +50,7 @@ pub trait DrawingTool {
     fn draw(&self, cnx: &Context);
     fn set_line_width(&mut self, width: f64);
     fn set_color(&mut self, color: colors::Color);
+    fn active(&mut self) -> bool;
 }
 
 pub struct NormalLine {
@@ -63,22 +72,36 @@ impl NormalLine {
         }
     }
 }
-
-pub fn calc_spline(p0: &Point, p1: &Point, p2: &Point, p3: &Point) -> (Point, Point) {
-
-    let d_0 = (*p1 - *p0) / 3.0;
-    let d_3 = (*p3 - *p2) / 3.0;
-    let b_1 = -0.25;
-    let b_2 = -1.0 / (4.0 + b_1);
-    let a_1 = (*p2 - *p0 - d_0) / 4.0;
-    let a_2 = (*p3 - *p1 - a_1) / (4.0 + b_1);
+// https://www.ibiblio.org/e-notes/Splines/b-int.html
+pub fn calc_whole_spline(points: &Vec<Point>) -> Vec<Point> {
+    let num_points = points.len();
+    // it does not work with less than 4 points, but this does not affect us since adding
+    // points happens fast
+    if num_points < 4 {
+        return vec![] 
+    }
+    let mut a = vec![Point(0.0, 0.0); num_points];
+    let mut b = vec![0.0; num_points];
+    b[1] = -0.25;
+    let mut d = vec![Point(0.0, 0.0); num_points];
     
-    let d_2 = a_2 + d_3 * b_2;
-    let d_1 = a_1 + d_2 * b_1 ;
-    (*p1+d_1, *p2-d_2)
+    let d_0 = (points[1] - points[0]) / 3.0;
+    let d_n = (points[num_points - 1] - points[num_points - 2]) / 3.0;
+    d[0] = d_0;
+    d[num_points - 1] = d_n;
+    a[1] = (points[2] - points[0] - d[0]) / 4.0;
+    for i in 2..num_points-1 {
+        b[i] = -1.0/(4.0 + b[i-1]);
+        a[i] = -(points[i+1] - points[i-1] - a[i-1]) * b[i];
+    }
+    for i in (1..num_points-2).rev() {
+        d[i] = a[i] + d[i+1] * b[i];
+    }
+    d
 }
 
 impl DrawingTool for NormalLine {
+
     fn release_mouse(&mut self, _: Point) {
         self.finished = true;
     }
@@ -88,7 +111,7 @@ impl DrawingTool for NormalLine {
     }
 
     fn motion_notify(&mut self, point: Point) {
-        if self.started && !self.finished {
+        if self.active() {
             self.points.push(point);
         }
     }
@@ -100,35 +123,23 @@ impl DrawingTool for NormalLine {
         ctx.set_line_width(self.line_width);
         ctx.set_line_cap(gtk4::cairo::LineCap::Round); 
         ctx.set_line_join(gtk4::cairo::LineJoin::Round);
-        
-        if self.points.len() > 1 {
-            let (first_two, _) = self.points.split_at(2);
-            match first_two {
-                [p1, p2] => {
-                    ctx.move_to(p1.0, p1.1);
-                    ctx.line_to(p2.0, p2.1);
 
-                    for chunk in self.points.windows(4) {
-                        match chunk {
-                            // we draw the spline between p2 and p3
-                            [p1, p2, p3, p4] => {
-                                // these are our 2 control points
-                                let (f1, f2) = calc_spline(p1,p2,p3,p4);
-                                ctx.curve_to(f1.0, f1.1,
-                                             f2.0, f2.1,
-                                             p3.0, p3.1);
-                            },
-                            _ => unreachable!(),
-                        }
-                    }
-                    match ctx.stroke() {
-                        Err(e) => panic!("{e}"),
-                        _ => ()
-                    }
-                }
+        if self.points.len() > 3 {
+            let controls = calc_whole_spline(&self.points);
+            let first_point = self.points[0];
+            ctx.move_to(first_point.0, first_point.1);
+            for i in 0..self.points.len() - 2 {
+                let p_0 = self.points[i];
+                let p_1 = self.points[i+1];
+                ctx.curve_to(p_0.0 + controls[i].0, p_0.1 + controls[i].1,
+                             p_1.0 - controls[i+1].0,  p_1.1 - controls[i+1].1,
+                             p_1.0, p_1.1) 
+            }
+            match ctx.stroke() {
+                Err(e) => panic!("{e}"),
                 _ => ()
             }
-        } 
+        }
     }
 
     fn set_line_width(&mut self, width: f64) {
@@ -137,6 +148,10 @@ impl DrawingTool for NormalLine {
 
     fn set_color(&mut self, color: colors::Color) {
         self.color = color;
+    }
+
+    fn active(&mut self) -> bool {
+       return self.started && !self.finished; 
     }
 }
 
