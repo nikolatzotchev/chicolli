@@ -59,6 +59,7 @@ fn activate(application: &gtk::Application) {
             // TOOLS
             10 => *current_tool.borrow_mut() = drawing::drawing_tool::CurrentDrawingTool::NormalLine,
             11 => *current_tool.borrow_mut() = drawing::drawing_tool::CurrentDrawingTool::NormalArrow,
+            12 => *current_tool.borrow_mut() = drawing::drawing_tool::CurrentDrawingTool::NormalRectangle,
             _ => ()
         };
         gtk::Inhibit(false)
@@ -111,6 +112,7 @@ fn activate(application: &gtk::Application) {
         let mut drawing_tool: Box<dyn drawing::drawing_tool::DrawingTool> = match *current_tool_use_copy.borrow() {
             drawing::drawing_tool::CurrentDrawingTool::NormalLine => Box::new(drawing::normal_line::NormalLine::new()),
             drawing::drawing_tool::CurrentDrawingTool::NormalArrow => Box::new(drawing::arrow::NormalArrow::new()),
+            drawing::drawing_tool::CurrentDrawingTool::NormalRectangle => Box::new(drawing::normal_rectangle::NormalRectangle::new()),
         };
         drawing_tool.press_mouse(drawing::drawing_tool::Point(x, y));
         drawing_tool.set_line_width(*line_width_draw_copy.borrow());
