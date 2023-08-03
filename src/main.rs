@@ -57,9 +57,14 @@ fn activate(application: &gtk::Application) {
             56 => *color_copy_change.borrow_mut() = colors::BLUE,
             // can add more later
             // TOOLS
+            // keyboard key 1
             10 => *current_tool.borrow_mut() = drawing::drawing_tool::CurrentDrawingTool::NormalLine,
-            11 => *current_tool.borrow_mut() = drawing::drawing_tool::CurrentDrawingTool::NormalArrow,
-            12 => *current_tool.borrow_mut() = drawing::drawing_tool::CurrentDrawingTool::NormalRectangle,
+            // keyboard key 2
+            11 => *current_tool.borrow_mut() = drawing::drawing_tool::CurrentDrawingTool::NormalArrowHeadBase,
+            // keyboard key 3
+            12 => *current_tool.borrow_mut() = drawing::drawing_tool::CurrentDrawingTool::NormalArrowHeadPointer,
+            // keyboard key 4
+            13 => *current_tool.borrow_mut() = drawing::drawing_tool::CurrentDrawingTool::NormalRectangle,
             _ => ()
         };
         gtk::Inhibit(false)
@@ -111,7 +116,8 @@ fn activate(application: &gtk::Application) {
     left_click_mouse.connect_pressed(move |_, _, x, y| {
         let mut drawing_tool: Box<dyn drawing::drawing_tool::DrawingTool> = match *current_tool_use_copy.borrow() {
             drawing::drawing_tool::CurrentDrawingTool::NormalLine => Box::new(drawing::normal_line::NormalLine::new()),
-            drawing::drawing_tool::CurrentDrawingTool::NormalArrow => Box::new(drawing::arrow::NormalArrow::new()),
+            drawing::drawing_tool::CurrentDrawingTool::NormalArrowHeadBase => Box::new(drawing::arrow::NormalArrow::new(true)),
+            drawing::drawing_tool::CurrentDrawingTool::NormalArrowHeadPointer => Box::new(drawing::arrow::NormalArrow::new(false)),
             drawing::drawing_tool::CurrentDrawingTool::NormalRectangle => Box::new(drawing::normal_rectangle::NormalRectangle::new()),
         };
         drawing_tool.press_mouse(drawing::drawing_tool::Point(x, y));

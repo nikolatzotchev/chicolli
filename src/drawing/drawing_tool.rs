@@ -45,7 +45,8 @@ impl std::ops::Neg for Point{
 
 pub enum CurrentDrawingTool {
     NormalLine,
-    NormalArrow,
+    NormalArrowHeadBase,
+    NormalArrowHeadPointer,
     NormalRectangle,
 }
 
