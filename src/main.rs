@@ -100,7 +100,7 @@ fn activate(application: &gtk::Application) {
     
     let line_width = Rc::new(RefCell::new(2.0));
     let line_width_draw_copy = line_width.clone();
-    let line_width_scrool_copy = line_width.clone();
+    let line_width_scroll_copy = line_width.clone();
 
     let left_click_mouse = gtk::GestureClick::new();
 
@@ -128,22 +128,23 @@ fn activate(application: &gtk::Application) {
 
     draw.add_controller(left_click_mouse);
  
-    // scrool controller 
-    let scrool_controller = gtk::EventControllerScroll::new(gtk::EventControllerScrollFlags::BOTH_AXES);
+    // scroll controller 
+    let scroll_controller = gtk::EventControllerScroll::new(gtk::EventControllerScrollFlags::BOTH_AXES);
     
-    scrool_controller.connect_scroll(move |_, _,  scrool| {
+    scroll_controller.connect_scroll(move |_, _,  scroll| {
 
-        let p:i32 = scrool as i32;
-        let mut width = line_width_scrool_copy.borrow_mut();
-        if p > 0 && *width > 1.0 {
-            *width -= 1.0;
+        let mut width = line_width_scroll_copy.borrow_mut();
+        let new_width = *width - scroll;
+        if new_width as i32 >= 1 {
+            *width = new_width;
         } else {
-            *width += 1.0;
+            *width = 1.0;
         }
+
         Inhibit(false)
     });
 
-    draw.add_controller(scrool_controller);
+    draw.add_controller(scroll_controller);
 
     draw.set_draw_func(move |_, ctx, _, _| {
 
