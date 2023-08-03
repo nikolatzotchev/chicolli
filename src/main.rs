@@ -132,18 +132,13 @@ fn activate(application: &gtk::Application) {
     let scrool_controller = gtk::EventControllerScroll::new(gtk::EventControllerScrollFlags::BOTH_AXES);
     
     scrool_controller.connect_scroll(move |_, _,  scrool| {
+
         let p:i32 = scrool as i32;
         let mut width = line_width_scrool_copy.borrow_mut();
-
-        match p {
-            1 => {
-                if *width > 1.0 {
-                    *width -= 1.0;
-                }
-            }, 
-            -1 =>  *width += 1.0,
-            _ => ()
-
+        if p > 0 && *width > 1.0 {
+            *width -= 1.0;
+        } else {
+            *width += 1.0;
         }
         Inhibit(false)
     });
