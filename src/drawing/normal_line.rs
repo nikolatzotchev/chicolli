@@ -24,7 +24,7 @@ impl NormalLine {
     }
 }
 // https://www.ibiblio.org/e-notes/Splines/b-int.html
-fn calc_whole_spline(points: &Vec<Point>) -> Vec<Point> {
+pub fn calc_whole_spline(points: &Vec<Point>) -> Vec<Point> {
     let num_points = points.len();
     // it does not work with less than 4 points, but this does not affect us since adding
     // points happens fast
