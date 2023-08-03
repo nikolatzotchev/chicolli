@@ -43,6 +43,11 @@ impl std::ops::Neg for Point{
     }
 }
 
+pub enum CurrentDrawingTool {
+    NormalLine,
+    NormalArrow,
+}
+
 pub trait DrawingTool {
     fn release_mouse(&mut self, point: Point);
     fn press_mouse(&mut self, point: Point);

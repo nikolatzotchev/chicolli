@@ -1,4 +1,5 @@
 use std::{rc::Rc, cell::RefCell};
+use drawing::drawing_tool::DrawingTool;
 use gtk4 as gtk;
 use gio::{prelude::*, glib};
 use gtk::{prelude::*, gdk::Display, Inhibit};
@@ -29,7 +30,7 @@ fn activate(application: &gtk::Application) {
     }
 
     // main components
-    let elements: Rc<RefCell<Vec<Box<dyn drawing::drawing_tool::DrawingTool>>>> = Rc::new(RefCell::new(Vec::new()));
+    let elements: Rc<RefCell<Vec<Box<dyn DrawingTool>>>> = Rc::new(RefCell::new(Vec::new()));
     let elements_draw_copy = elements.clone();
     let elements_mouse_1_press_copy = elements.clone();
     let elements_mouse_2_press_copy = elements.clone();
@@ -37,6 +38,35 @@ fn activate(application: &gtk::Application) {
 
     let color = Rc::new(RefCell::new(colors::RED));
     let color_copy_change = color.clone();
+   
+    let current_tool = Rc::new(RefCell::new(drawing::drawing_tool::CurrentDrawingTool::NormalLine));
+    let current_tool_use_copy = current_tool.clone();
+
+    let key_controller = gtk::EventControllerKey::new();
+
+    key_controller.connect_key_pressed(move |_, keyval, key_number , _| {
+        println!( "Key pressed: keyval={}", keyval);
+        println!( "Key number = {}", key_number);
+        match key_number {
+            // COLORS
+            // r for red
+            27 => *color_copy_change.borrow_mut() = colors::RED,
+            // g for green 
+            42 => *color_copy_change.borrow_mut() = colors::GREEN,
+            // b for blue
+            56 => *color_copy_change.borrow_mut() = colors::BLUE,
+            // can add more later
+            // TOOLS
+            10 => *current_tool.borrow_mut() = drawing::drawing_tool::CurrentDrawingTool::NormalLine,
+            11 => *current_tool.borrow_mut() = drawing::drawing_tool::CurrentDrawingTool::NormalArrow,
+            _ => ()
+        };
+        gtk::Inhibit(false)
+    });
+
+    // key controller is added to the window and not to the drawarea because there it does not
+    // work
+    window.add_controller(key_controller); 
 
     // Set up a widget
     let draw = gtk::DrawingArea::new();
@@ -53,28 +83,7 @@ fn activate(application: &gtk::Application) {
 
     draw.add_controller(motion_controller);
 
-    let key_controller = gtk::EventControllerKey::new();
-
-    key_controller.connect_key_pressed(move |_, keyval, key_number , _| {
-        println!( "Key pressed: keyval={}", keyval);
-        println!( "Key number = {}", key_number);
-        match key_number {
-            // r for red
-            27 => *color_copy_change.borrow_mut() = colors::RED,
-            // g for green 
-            42 => *color_copy_change.borrow_mut() = colors::GREEN,
-            // b for blue
-            56 => *color_copy_change.borrow_mut() = colors::BLUE,
-            // can add more later
-            _ => ()
-        };
-        gtk::Inhibit(false)
-    });
-
-    // key controller is added to the window and not to the drawarea because there it does not
-    // work
-    window.add_controller(key_controller); 
-   
+      
     let right_click_mouse = gtk::GestureClick::new();
 
     // Set the gestures button to the right mouse button (=3)
@@ -99,7 +108,10 @@ fn activate(application: &gtk::Application) {
    
     // Assign your handler to an event of the gesture (e.g. the `pressed` event)
     left_click_mouse.connect_pressed(move |_, _, x, y| {
-        let mut drawing_tool: Box<dyn drawing::drawing_tool::DrawingTool> = Box::new(drawing::normal_line::NormalLine::new());
+        let mut drawing_tool: Box<dyn drawing::drawing_tool::DrawingTool> = match *current_tool_use_copy.borrow() {
+            drawing::drawing_tool::CurrentDrawingTool::NormalLine => Box::new(drawing::normal_line::NormalLine::new()),
+            drawing::drawing_tool::CurrentDrawingTool::NormalArrow => Box::new(drawing::arrow::NormalArrow::new()),
+        };
         drawing_tool.press_mouse(drawing::drawing_tool::Point(x, y));
         drawing_tool.set_line_width(*line_width_draw_copy.borrow());
         drawing_tool.set_color(*color.borrow());
