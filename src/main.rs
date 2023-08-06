@@ -12,12 +12,12 @@ fn activate(application: &gtk::Application) {
     let window = gtk::ApplicationWindow::new(application);
 
     application.connect_activate(glib::clone!(@weak window => move |_| {
-        gtk4_layer_shell::set_keyboard_mode(&window, gtk4_layer_shell::KeyboardMode::OnDemand);
+        gtk4_layer_shell::set_keyboard_mode(&window, gtk4_layer_shell::KeyboardMode::Exclusive);
         window.surface().set_opaque_region(Some(&Region::create()));
     }));
     // Before the window is first realized, set it up to be a layer surface
     gtk4_layer_shell::init_for_window(&window);
-    gtk4_layer_shell::set_keyboard_mode(&window, gtk4_layer_shell::KeyboardMode::OnDemand);
+    gtk4_layer_shell::set_keyboard_mode(&window, gtk4_layer_shell::KeyboardMode::Exclusive);
     // Display above normal windows
     gtk4_layer_shell::set_layer(&window, gtk4_layer_shell::Layer::Overlay);
 
