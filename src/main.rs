@@ -2,7 +2,7 @@ use std::{rc::Rc, cell::RefCell};
 use drawing::drawing_tool::DrawingTool;
 use gtk4 as gtk;
 use gio::{prelude::*, glib};
-use gtk::{prelude::*, gdk::Display, Inhibit};
+use gtk::{prelude::*, gdk::Display, Inhibit, cairo::Region};
 
 pub mod drawing;
 pub mod colors;
@@ -11,9 +11,12 @@ fn activate(application: &gtk::Application) {
     // Create a normal GTK window however you like
     let window = gtk::ApplicationWindow::new(application);
 
+    application.connect_activate(glib::clone!(@weak window => move |_| {
+        gtk4_layer_shell::set_keyboard_mode(&window, gtk4_layer_shell::KeyboardMode::OnDemand);
+        window.surface().set_opaque_region(Some(&Region::create()));
+    }));
     // Before the window is first realized, set it up to be a layer surface
     gtk4_layer_shell::init_for_window(&window);
-    // gtk4_layer_shell::set_keyboard_mode(&window, gtk4_layer_shell::KeyboardMode::OnDemand);
     gtk4_layer_shell::set_keyboard_mode(&window, gtk4_layer_shell::KeyboardMode::OnDemand);
     // Display above normal windows
     gtk4_layer_shell::set_layer(&window, gtk4_layer_shell::Layer::Overlay);
@@ -39,10 +42,15 @@ fn activate(application: &gtk::Application) {
 
     let key_controller = gtk::EventControllerKey::new();
 
-    key_controller.connect_key_pressed(glib::clone!(@strong color, @strong current_tool => @default-return gtk::Inhibit(false), move |_, keyval, key_number , _| {
+    key_controller.connect_key_pressed(glib::clone!(@weak window, @strong color, @strong current_tool => @default-return gtk::Inhibit(false), move |_, keyval, key_number , _| {
         println!( "Key pressed: keyval={}", keyval);
         println!( "Key number = {}", key_number);
         match key_number {
+            // Disable stuff
+            40 => {
+                gtk4_layer_shell::set_keyboard_mode(&window, gtk4_layer_shell::KeyboardMode::None);
+                window.surface().set_input_region(&Region::create());
+            },
             // COLORS
             // r for red
             27 => *color.borrow_mut() = colors::RED,
