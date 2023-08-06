@@ -50,6 +50,8 @@ fn activate(application: &gtk::Application) {
             40 => {
                 gtk4_layer_shell::set_keyboard_mode(&window, gtk4_layer_shell::KeyboardMode::None);
                 window.surface().set_input_region(&Region::create());
+                window.unmap();
+                window.map();
             },
             // COLORS
             // r for red
