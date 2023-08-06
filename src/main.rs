@@ -13,7 +13,8 @@ fn activate(application: &gtk::Application) {
 
     // Before the window is first realized, set it up to be a layer surface
     gtk4_layer_shell::init_for_window(&window);
-    gtk4_layer_shell::set_keyboard_mode(&window, gtk4_layer_shell::KeyboardMode::Exclusive);
+    // gtk4_layer_shell::set_keyboard_mode(&window, gtk4_layer_shell::KeyboardMode::OnDemand);
+    gtk4_layer_shell::set_keyboard_mode(&window, gtk4_layer_shell::KeyboardMode::OnDemand);
     // Display above normal windows
     gtk4_layer_shell::set_layer(&window, gtk4_layer_shell::Layer::Overlay);
 
@@ -31,30 +32,24 @@ fn activate(application: &gtk::Application) {
 
     // main components
     let elements: Rc<RefCell<Vec<Box<dyn DrawingTool>>>> = Rc::new(RefCell::new(Vec::new()));
-    let elements_draw_copy = elements.clone();
-    let elements_mouse_1_press_copy = elements.clone();
-    let elements_mouse_2_press_copy = elements.clone();
-    let elements_motion_copy = elements.clone();
 
     let color = Rc::new(RefCell::new(colors::RED));
-    let color_copy_change = color.clone();
    
     let current_tool = Rc::new(RefCell::new(drawing::drawing_tool::CurrentDrawingTool::NormalLine));
-    let current_tool_use_copy = current_tool.clone();
 
     let key_controller = gtk::EventControllerKey::new();
 
-    key_controller.connect_key_pressed(move |_, keyval, key_number , _| {
+    key_controller.connect_key_pressed(glib::clone!(@strong color, @strong current_tool => @default-return gtk::Inhibit(false), move |_, keyval, key_number , _| {
         println!( "Key pressed: keyval={}", keyval);
         println!( "Key number = {}", key_number);
         match key_number {
             // COLORS
             // r for red
-            27 => *color_copy_change.borrow_mut() = colors::RED,
+            27 => *color.borrow_mut() = colors::RED,
             // g for green 
-            42 => *color_copy_change.borrow_mut() = colors::GREEN,
+            42 => *color.borrow_mut() = colors::GREEN,
             // b for blue
-            56 => *color_copy_change.borrow_mut() = colors::BLUE,
+            56 => *color.borrow_mut() = colors::BLUE,
             // can add more later
             // TOOLS
             // keyboard key 1
@@ -68,7 +63,7 @@ fn activate(application: &gtk::Application) {
             _ => ()
         };
         gtk::Inhibit(false)
-    });
+    }));
 
     // key controller is added to the window and not to the drawarea because there it does not
     // work
@@ -77,9 +72,9 @@ fn activate(application: &gtk::Application) {
     // Set up a widget
     let draw = gtk::DrawingArea::new();
 
-    let motion_controller =  gtk::EventControllerMotion::new();
-    motion_controller.connect_motion(glib::clone!(@weak draw => move |_, x, y| {
-        if let Some(elem) = elements_motion_copy.borrow_mut().last_mut() {
+    let motion_controller = gtk::EventControllerMotion::new();
+    motion_controller.connect_motion(glib::clone!(@weak draw, @strong elements => move |_, x, y| {
+        if let Some(elem) = elements.borrow_mut().last_mut() {
             elem.motion_notify(drawing::drawing_tool::Point(x, y));
             if elem.active() {
                  draw.queue_draw();
@@ -104,8 +99,6 @@ fn activate(application: &gtk::Application) {
     draw.add_controller(right_click_mouse);
     
     let line_width = Rc::new(RefCell::new(2.0));
-    let line_width_draw_copy = line_width.clone();
-    let line_width_scroll_copy = line_width.clone();
 
     let left_click_mouse = gtk::GestureClick::new();
 
@@ -113,33 +106,33 @@ fn activate(application: &gtk::Application) {
     left_click_mouse.set_button(gtk::gdk::ffi::GDK_BUTTON_PRIMARY as u32);
    
     // Assign your handler to an event of the gesture (e.g. the `pressed` event)
-    left_click_mouse.connect_pressed(move |_, _, x, y| {
-        let mut drawing_tool: Box<dyn drawing::drawing_tool::DrawingTool> = match *current_tool_use_copy.borrow() {
+    left_click_mouse.connect_pressed(glib::clone!(@strong elements, @strong current_tool, @strong line_width => move |_, _, x, y| {
+        let mut drawing_tool: Box<dyn drawing::drawing_tool::DrawingTool> = match *current_tool.borrow() {
             drawing::drawing_tool::CurrentDrawingTool::NormalLine => Box::new(drawing::normal_line::NormalLine::new()),
             drawing::drawing_tool::CurrentDrawingTool::NormalArrowHeadBase => Box::new(drawing::arrow::NormalArrow::new(true)),
             drawing::drawing_tool::CurrentDrawingTool::NormalArrowHeadPointer => Box::new(drawing::arrow::NormalArrow::new(false)),
             drawing::drawing_tool::CurrentDrawingTool::NormalRectangle => Box::new(drawing::normal_rectangle::NormalRectangle::new()),
         };
         drawing_tool.press_mouse(drawing::drawing_tool::Point(x, y));
-        drawing_tool.set_line_width(*line_width_draw_copy.borrow());
+        drawing_tool.set_line_width(*line_width.borrow());
         drawing_tool.set_color(*color.borrow());
-        elements_mouse_1_press_copy.borrow_mut().push(drawing_tool);
-    });
+        elements.borrow_mut().push(drawing_tool);
+    }));
 
-    left_click_mouse.connect_released(move |_, _, x, y| {
-        if let Some(elem) = elements_mouse_2_press_copy.borrow_mut().last_mut() {
+    left_click_mouse.connect_released(glib::clone!(@strong elements => move |_, _, x, y| {
+        if let Some(elem) = elements.borrow_mut().last_mut() {
             elem.release_mouse(drawing::drawing_tool::Point(x, y));
         }
-    });
+    }));
 
     draw.add_controller(left_click_mouse);
  
     // scroll controller 
     let scroll_controller = gtk::EventControllerScroll::new(gtk::EventControllerScrollFlags::BOTH_AXES);
     
-    scroll_controller.connect_scroll(move |_, _,  scroll| {
+    scroll_controller.connect_scroll(glib::clone!(@strong line_width => @default-return Inhibit(false), move |_, _,  scroll| {
 
-        let mut width = line_width_scroll_copy.borrow_mut();
+        let mut width = line_width.borrow_mut();
         let new_width = *width - scroll;
         if new_width as i32 >= 1 {
             *width = new_width;
@@ -148,20 +141,20 @@ fn activate(application: &gtk::Application) {
         }
 
         Inhibit(false)
-    });
+    }));
 
     draw.add_controller(scroll_controller);
 
-    draw.set_draw_func(move |_, ctx, _, _| {
+    draw.set_draw_func(glib::clone!(@weak elements => move |_, ctx, _, _| {
 
-        for element in elements_draw_copy.borrow_mut().iter() {
+        for element in elements.borrow_mut().iter() {
             element.draw(ctx); 
         }
 
         if let Err(error) = ctx.fill() { 
             panic!("error drawing: {:?}", error)
         };
-    });
+    }));
 
     // load css for the transparency of the window
     let provider = gtk::CssProvider::new();
