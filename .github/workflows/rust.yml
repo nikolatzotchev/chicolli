@@ -11,7 +11,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
     - name: Apt update
       run: sudo apt update
     - run: sudo apt install libgtk-4-dev
@@ -20,4 +19,5 @@ jobs:
     - run: cd gtk4-layer-shell && meson setup -Dexamples=true -Ddocs=true -Dtests=true build && ninja -C build && sudo ninja -C build install && sudo ldconfig
     - run: export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig
     - run: export LD_LIBRARY_PATH=/usr/local/lib
-    - run: cd .. && cargo build --verbose
+    - uses: actions/checkout@v3
+    - run: cd ../ && cargo build --verbose
