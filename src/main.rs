@@ -6,6 +6,7 @@ use gtk::{
     prelude::*,
     Inhibit,
 };
+
 use gtk4 as gtk;
 use std::{cell::RefCell, rc::Rc};
 
@@ -120,7 +121,7 @@ fn activate(application: &gtk::Application) {
 
     draw.add_controller(right_click_mouse);
 
-    let line_width = Rc::new(RefCell::new(2.0));
+    let line_width = Rc::new(RefCell::new(conf.line_thickness.unwrap_or(2.0)));
 
     let left_click_mouse = gtk::GestureClick::new();
 
