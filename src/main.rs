@@ -1,13 +1,12 @@
 use drawing::drawing_tool::DrawingTool;
-use gio::{glib, prelude::*};
+
+use gtk::glib::{self, Propagation};
 use gtk::{
     cairo::Region,
     gdk::{Display, Key},
     prelude::*,
-    Inhibit,
 };
 
-use gtk4 as gtk;
 use std::{cell::RefCell, rc::Rc};
 
 pub mod colors;
@@ -31,7 +30,6 @@ fn activate(application: &gtk::Application) {
     gtk4_layer_shell::set_keyboard_mode(&window, gtk4_layer_shell::KeyboardMode::Exclusive);
     // Display above normal windows
     gtk4_layer_shell::set_layer(&window, gtk4_layer_shell::Layer::Overlay);
-
     // Anchors are if the window is pinned to each edge of the output
     let anchors = [
         (gtk4_layer_shell::Edge::Left, true),
@@ -55,7 +53,7 @@ fn activate(application: &gtk::Application) {
 
     let key_controller = gtk::EventControllerKey::new();
 
-    key_controller.connect_key_pressed(glib::clone!(@weak window, @strong conf, @strong color, @strong current_tool => @default-return gtk::Inhibit(false), move |_, keyval, _, _| {
+    key_controller.connect_key_pressed(glib::clone!(@weak window, @strong conf, @strong color, @strong current_tool => @default-return Propagation::Proceed, move |_, keyval, _, _| {
         // close your eyes 
         let _draw_key = Key::from_name(conf.draw_keybind.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
         let _arrow_key = Key::from_name(conf.arrow_keybind.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
@@ -84,7 +82,7 @@ fn activate(application: &gtk::Application) {
             _ if _color_b == keyval =>  *color.borrow_mut() = colors::BLUE,
             _ => (),
         };
-        gtk::Inhibit(false)
+        Propagation::Proceed
     }));
 
     // key controller is added to the window and not to the drawarea because there it does not
@@ -155,7 +153,7 @@ fn activate(application: &gtk::Application) {
         gtk::EventControllerScroll::new(gtk::EventControllerScrollFlags::BOTH_AXES);
 
     scroll_controller.connect_scroll(
-        glib::clone!(@strong line_width => @default-return Inhibit(false), move |_, _,  scroll| {
+        glib::clone!(@strong line_width => @default-return Propagation::Proceed, move |_, _,  scroll| {
 
             let mut width = line_width.borrow_mut();
             let new_width = *width - scroll;
@@ -164,8 +162,7 @@ fn activate(application: &gtk::Application) {
             } else {
                 *width = 1.0;
             }
-
-            Inhibit(false)
+            Propagation::Proceed
         }),
     );
 
@@ -192,7 +189,7 @@ fn activate(application: &gtk::Application) {
     );
 
     window.set_child(Some(&draw));
-    window.show();
+    window.set_visible(true);
 }
 
 fn main() {

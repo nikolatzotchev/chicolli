@@ -1,4 +1,4 @@
-use gtk4::cairo::Context;
+use gtk::cairo::Context;
 
 use crate::colors;
 
@@ -69,8 +69,8 @@ impl DrawingTool for NormalLine {
         let color = self.color;
         ctx.set_source_rgb(color.0, color.1, color.2);
         ctx.set_line_width(self.line_width);
-        ctx.set_line_cap(gtk4::cairo::LineCap::Round);
-        ctx.set_line_join(gtk4::cairo::LineJoin::Round);
+        ctx.set_line_cap(gtk::cairo::LineCap::Round);
+        ctx.set_line_join(gtk::cairo::LineJoin::Round);
 
         if self.points.len() > 3 {
             let controls = calc_whole_spline(&self.points);

@@ -44,12 +44,12 @@ impl DrawingTool for NormalArrow {
         }
     }
 
-    fn draw(&self, cnx: &gtk4::cairo::Context) {
+    fn draw(&self, cnx: &gtk::cairo::Context) {
         if let (Some(start), Some(end)) = (self.start, self.end) {
             let color = self.color;
             cnx.set_source_rgb(color.0, color.1, color.2);
-            cnx.set_line_cap(gtk4::cairo::LineCap::Round);
-            cnx.set_line_join(gtk4::cairo::LineJoin::Round);
+            cnx.set_line_cap(gtk::cairo::LineCap::Round);
+            cnx.set_line_join(gtk::cairo::LineJoin::Round);
             cnx.set_line_width(self.arrow_width);
             cnx.move_to(start.0, start.1);
             cnx.line_to(end.0, end.1);

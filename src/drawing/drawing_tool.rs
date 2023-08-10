@@ -1,4 +1,4 @@
-use gtk4::cairo::Context;
+use gtk::cairo::Context;
 
 use crate::colors;
 
