@@ -22,19 +22,5 @@ jobs:
     - run: cd ..
     - name: Build
       run: cargo build --verbose
-    
-#     - name: run our repo
-#       - uses: actions/checkout@v3
-#       - run: sudo apt install meson libwayland-dev libgtk-4-dev gobject-introspection libgirepository1.0-dev gtk-doc-tools valac
-#       - run: git clone https://github.com/wmww/gtk4-layer-shell
-#       - run: cd gtk4-layer-shell
-#       - run: meson setup -Dexamples=true -Ddocs=true -Dtests=true build
-#       - run: ninja -C build
-#       - run: sudo ninja -C build install
-#       - run: sudo ldconfig
-#       - run: export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig
-#       - run: export LD_LIBRARY_PATH=/usr/local/lib
-#       - name: Build
-#         run: cargo build --verbose
-#       - name: Run tests
-#         run: cargo test --verbose
+    - name: Run tests
+      run: cargo test --verbose
