@@ -12,6 +12,7 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
+    - run: sudo apt install meson libwayland-dev libgtk-4-dev gobject-introspection libgirepository1.0-dev gtk-doc-tools valac
     - name: Build
       run: cargo build --verbose
     - name: Run tests
