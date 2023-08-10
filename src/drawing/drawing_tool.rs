@@ -3,7 +3,7 @@ use gtk4::cairo::Context;
 use crate::colors;
 
 #[derive(Clone, Debug, Copy)]
-pub struct Point(pub f64,pub f64);
+pub struct Point(pub f64, pub f64);
 
 impl std::ops::Add<Point> for Point {
     type Output = Point;
@@ -20,29 +20,30 @@ impl std::ops::Sub<Point> for Point {
     }
 }
 impl std::ops::Mul<f64> for Point {
-   type Output = Point;
+    type Output = Point;
 
-   fn mul(self, rhs: f64) -> Self::Output {
-       Point(self.0 * rhs, self.1 * rhs)
-   } 
+    fn mul(self, rhs: f64) -> Self::Output {
+        Point(self.0 * rhs, self.1 * rhs)
+    }
 }
 
 impl std::ops::Div<f64> for Point {
-   type Output = Point;
-
-   fn div(self, rhs: f64) -> Self::Output {
-       Point(self.0 / rhs, self.1 / rhs)
-   } 
-}
-
-impl std::ops::Neg for Point{
     type Output = Point;
 
-    fn neg(self) -> Point{
+    fn div(self, rhs: f64) -> Self::Output {
+        Point(self.0 / rhs, self.1 / rhs)
+    }
+}
+
+impl std::ops::Neg for Point {
+    type Output = Point;
+
+    fn neg(self) -> Point {
         Point(-self.0, -self.1)
     }
 }
 
+#[derive(Debug)]
 pub enum CurrentDrawingTool {
     NormalLine,
     NormalArrowHeadBase,
@@ -59,4 +60,3 @@ pub trait DrawingTool {
     fn set_color(&mut self, color: colors::Color);
     fn active(&mut self) -> bool;
 }
-
