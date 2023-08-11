@@ -1,5 +1,6 @@
 use drawing::drawing_tool::DrawingTool;
 
+use gio::Cancellable;
 use gtk::glib::{self, Propagation};
 use gtk::{
     cairo::Region,
@@ -53,7 +54,18 @@ fn activate(application: &gtk::Application) {
 
     let key_controller = gtk::EventControllerKey::new();
 
-    key_controller.connect_key_pressed(glib::clone!(@weak window, @strong conf, @strong color, @strong current_tool => @default-return Propagation::Proceed, move |_, keyval, _, _| {
+    let color_dialog = Rc::new(gtk::ColorDialog::builder().title("Choose color").modal(false).build());
+    color_dialog.choose_rgba(
+        Some(&window),
+        Some(&gtk::gdk::RGBA::RED),
+        Some(&Cancellable::new()),
+        |c| match c {
+            Ok(c) => println!("hmm {}", c),
+            Err(_) => (),
+        },
+        );
+
+    key_controller.connect_key_pressed(glib::clone!(@weak window as w, @strong color_dialog, @strong conf, @strong color, @strong current_tool => @default-return Propagation::Proceed, move |_, keyval, _, _| {
         // close your eyes 
         let _draw_key = Key::from_name(conf.draw_keybind.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
         let _arrow_key = Key::from_name(conf.arrow_keybind.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
@@ -63,6 +75,7 @@ fn activate(application: &gtk::Application) {
         let _color_r = Key::from_name(conf.color_r.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
         let _color_g = Key::from_name(conf.color_g.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
         let _color_b = Key::from_name(conf.color_b.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
+        let _color_chooser = Key::from_name(conf.color_chooser.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
 
         match keyval {
             // TOOLS
@@ -71,15 +84,29 @@ fn activate(application: &gtk::Application) {
             _ if _reverse_arrow_key == keyval => *current_tool.borrow_mut() = drawing::drawing_tool::CurrentDrawingTool::NormalArrowHeadBase,
             _ if _rectangle_key == keyval => *current_tool.borrow_mut() = drawing::drawing_tool::CurrentDrawingTool::NormalRectangle,
             _ if _disable_drawing_key == keyval => {
-                gtk4_layer_shell::set_keyboard_mode(&window, gtk4_layer_shell::KeyboardMode::None);
-                window.surface().set_input_region(&Region::create());
-                window.unmap();
-                window.map();
+                gtk4_layer_shell::set_keyboard_mode(&w, gtk4_layer_shell::KeyboardMode::None);
+                w.surface().set_input_region(&Region::create());
+                w.unmap();
+                w.map();
             },
             // colors
             _ if _color_r == keyval =>  *color.borrow_mut() = colors::RED,
             _ if _color_g == keyval =>  *color.borrow_mut() = colors::GREEN,
             _ if _color_b == keyval =>  *color.borrow_mut() = colors::BLUE,
+            _ if _color_chooser == keyval => {
+                println!("ytes");
+                // color_dialog.choose_rgba(
+                //     Some(&w),
+                //     Some(&gtk::gdk::RGBA::RED),
+                //     Some(&Cancellable::new()),
+                //     |c| match c {
+                //         Ok(c) => println!("hmm {}", c),
+                //         Err(_) => (),
+                //     },
+                //     );
+                // println!("hmmmmmmmmmmm");
+
+            },
             _ => (),
         };
         Propagation::Proceed
@@ -154,7 +181,6 @@ fn activate(application: &gtk::Application) {
 
     scroll_controller.connect_scroll(
         glib::clone!(@strong line_width => @default-return Propagation::Proceed, move |_, _,  scroll| {
-
             let mut width = line_width.borrow_mut();
             let new_width = *width - scroll;
             if new_width as i32 >= 1 {
@@ -188,6 +214,16 @@ fn activate(application: &gtk::Application) {
         gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
     );
 
+    // let ff = gtk::ColorDialog::builder().title("Choose color").build();
+    // ff.choose_rgba(
+    //     Some(&window),
+    //     Some(&gtk::gdk::RGBA::RED),
+    //     Some(&Cancellable::new()),
+    //     |c| match c {
+    //         Ok(c) => println!("hmm {}", c),
+    //         Err(_) => (),
+    //     },
+    // );
     window.set_child(Some(&draw));
     window.set_visible(true);
 }

@@ -17,6 +17,7 @@ pub struct Configuration {
     pub color_r: Option<String>,
     pub color_g: Option<String>,
     pub color_b: Option<String>,
+    pub color_chooser: Option<String>,
 }
 
 impl Configuration {
@@ -31,6 +32,7 @@ impl Configuration {
             color_r: None,
             color_g: None,
             color_b: None,
+            color_chooser: None,
         }
     }
 }
@@ -47,6 +49,7 @@ impl Default for Configuration {
             color_r: Some(String::from("r")),
             color_g: Some(String::from("g")),
             color_b: Some(String::from("b")),
+            color_chooser: Some(String::from("c")),
         }
     }
 }
@@ -65,6 +68,7 @@ impl Configuration {
             color_r: self.color_r.or(other_config.color_r),
             color_g: self.color_g.or(other_config.color_g),
             color_b: self.color_b.or(other_config.color_b),
+            color_chooser: self.color_chooser.or(other_config.color_chooser),
         }
     }
 }
