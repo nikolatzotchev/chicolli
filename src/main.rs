@@ -55,15 +55,15 @@ fn activate(application: &gtk::Application) {
     let key_controller = gtk::EventControllerKey::new();
 
     let color_dialog = Rc::new(gtk::ColorDialog::builder().title("Choose color").modal(false).build());
-    color_dialog.choose_rgba(
-        Some(&window),
-        Some(&gtk::gdk::RGBA::RED),
-        Some(&Cancellable::new()),
-        |c| match c {
-            Ok(c) => println!("hmm {}", c),
-            Err(_) => (),
-        },
-        );
+    // color_dialog.choose_rgba(
+    //     Some(&window),
+    //     Some(&gtk::gdk::RGBA::RED),
+    //     Some(&Cancellable::new()),
+    //     |c| match c {
+    //         Ok(c) => println!("hmm {}", c),
+    //         Err(_) => (),
+    //     },
+    //     );
 
     key_controller.connect_key_pressed(glib::clone!(@weak window as w, @strong color_dialog, @strong conf, @strong color, @strong current_tool => @default-return Propagation::Proceed, move |_, keyval, _, _| {
         // close your eyes 
@@ -95,16 +95,16 @@ fn activate(application: &gtk::Application) {
             _ if _color_b == keyval =>  *color.borrow_mut() = colors::BLUE,
             _ if _color_chooser == keyval => {
                 println!("ytes");
-                // color_dialog.choose_rgba(
-                //     Some(&w),
-                //     Some(&gtk::gdk::RGBA::RED),
-                //     Some(&Cancellable::new()),
-                //     |c| match c {
-                //         Ok(c) => println!("hmm {}", c),
-                //         Err(_) => (),
-                //     },
-                //     );
-                // println!("hmmmmmmmmmmm");
+                color_dialog.choose_rgba(
+                    Some(&w),
+                    Some(&gtk::gdk::RGBA::RED),
+                    Some(&Cancellable::new()),
+                    |c| match c {
+                        Ok(c) => println!("hmm {}", c),
+                        Err(_) => (),
+                    },
+                    );
+                println!("hmmmmmmmmmmm");
 
             },
             _ => (),
