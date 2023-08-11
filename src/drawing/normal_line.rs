@@ -67,7 +67,11 @@ impl DrawingTool for NormalLine {
 
     fn draw(&self, ctx: &Context) -> () {
         let color = self.color;
-        ctx.set_source_rgb(color.0, color.1, color.2);
+        ctx.set_source_rgb(
+            color.red().into(),
+            color.green().into(),
+            color.blue().into(),
+        );
         ctx.set_line_width(self.line_width);
         ctx.set_line_cap(gtk::cairo::LineCap::Round);
         ctx.set_line_join(gtk::cairo::LineJoin::Round);

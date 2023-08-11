@@ -60,7 +60,7 @@ fn activate(application: &gtk::Application) {
             .modal(false)
             .build(),
     );
-    
+
     // Set up a widget
     let draw = gtk::DrawingArea::new();
 
@@ -98,11 +98,10 @@ fn activate(application: &gtk::Application) {
                     None::<&gtk::Window>,
                     Some(&gtk::gdk::RGBA::RED),
                     Some(&Cancellable::new()),
-                    glib::clone!(@weak w => move |c| match c {
+                    glib::clone!(@strong color, @weak w => move |c| match c {
                         Ok(c) => {
-
-                            println!("hmm {}", c);
                             gtk4_layer_shell::set_layer(&w, gtk4_layer_shell::Layer::Overlay);
+                            *color.borrow_mut() = c;
                         },
                         Err(e) => {
                             eprintln!("error this is {}", e);
@@ -119,7 +118,6 @@ fn activate(application: &gtk::Application) {
     // key controller is added to the window and not to the drawarea because there it does not
     // work
     window.add_controller(key_controller);
-
 
     let motion_controller = gtk::EventControllerMotion::new();
     motion_controller.connect_motion(

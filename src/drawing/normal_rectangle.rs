@@ -41,7 +41,11 @@ impl DrawingTool for NormalRectangle {
     fn draw(&self, cnx: &gtk::cairo::Context) {
         if let (Some(start), Some(end)) = (self.start, self.end) {
             let color = self.color;
-            cnx.set_source_rgb(color.0, color.1, color.2);
+            cnx.set_source_rgb(
+                color.red().into(),
+                color.green().into(),
+                color.blue().into(),
+            );
             cnx.set_line_cap(gtk::cairo::LineCap::Round);
             cnx.set_line_join(gtk::cairo::LineJoin::Round);
             cnx.set_line_width(self.line_width);
