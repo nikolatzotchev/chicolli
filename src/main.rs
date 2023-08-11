@@ -54,18 +54,17 @@ fn activate(application: &gtk::Application) {
 
     let key_controller = gtk::EventControllerKey::new();
 
-    let color_dialog = Rc::new(gtk::ColorDialog::builder().title("Choose color").modal(false).build());
-    // color_dialog.choose_rgba(
-    //     Some(&window),
-    //     Some(&gtk::gdk::RGBA::RED),
-    //     Some(&Cancellable::new()),
-    //     |c| match c {
-    //         Ok(c) => println!("hmm {}", c),
-    //         Err(_) => (),
-    //     },
-    //     );
+    let color_dialog = Rc::new(
+        gtk::ColorDialog::builder()
+            .title("Choose color")
+            .modal(false)
+            .build(),
+    );
+    
+    // Set up a widget
+    let draw = gtk::DrawingArea::new();
 
-    key_controller.connect_key_pressed(glib::clone!(@weak window as w, @strong color_dialog, @strong conf, @strong color, @strong current_tool => @default-return Propagation::Proceed, move |_, keyval, _, _| {
+    key_controller.connect_key_pressed(glib::clone!(@weak draw, @strong window as w, @strong color_dialog, @strong conf, @strong color, @strong current_tool => @default-return Propagation::Proceed, move |_, keyval, _, _| {
         // close your eyes 
         let _draw_key = Key::from_name(conf.draw_keybind.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
         let _arrow_key = Key::from_name(conf.arrow_keybind.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
@@ -94,18 +93,23 @@ fn activate(application: &gtk::Application) {
             _ if _color_g == keyval =>  *color.borrow_mut() = colors::GREEN,
             _ if _color_b == keyval =>  *color.borrow_mut() = colors::BLUE,
             _ if _color_chooser == keyval => {
-                println!("ytes");
+                gtk4_layer_shell::set_layer(&w, gtk4_layer_shell::Layer::Bottom);
                 color_dialog.choose_rgba(
-                    Some(&w),
+                    None::<&gtk::Window>,
                     Some(&gtk::gdk::RGBA::RED),
                     Some(&Cancellable::new()),
-                    |c| match c {
-                        Ok(c) => println!("hmm {}", c),
-                        Err(_) => (),
-                    },
-                    );
-                println!("hmmmmmmmmmmm");
+                    glib::clone!(@weak w => move |c| match c {
+                        Ok(c) => {
 
+                            println!("hmm {}", c);
+                            gtk4_layer_shell::set_layer(&w, gtk4_layer_shell::Layer::Overlay);
+                        },
+                        Err(e) => {
+                            eprintln!("error this is {}", e);
+                            gtk4_layer_shell::set_layer(&w, gtk4_layer_shell::Layer::Overlay);
+                        }
+                    }),
+                    );
             },
             _ => (),
         };
@@ -116,8 +120,6 @@ fn activate(application: &gtk::Application) {
     // work
     window.add_controller(key_controller);
 
-    // Set up a widget
-    let draw = gtk::DrawingArea::new();
 
     let motion_controller = gtk::EventControllerMotion::new();
     motion_controller.connect_motion(
