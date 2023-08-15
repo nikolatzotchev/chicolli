@@ -1,8 +1,7 @@
-#[derive(Clone, Copy)]
-pub struct Color(pub f64, pub f64, pub f64);
+pub type Color = gtk::gdk::RGBA;
 
-pub const RED: Color = Color(0.85, 0.10, 0.05);
+pub const RED: Color = Color::RED;
 
-pub const BLUE: Color = Color(0.0, 0.28, 0.73);
+pub const BLUE: Color = Color::BLUE;
 
-pub const GREEN: Color = Color(0.20, 0.93, 0.40);
+pub const GREEN: Color = Color::GREEN;
