@@ -57,7 +57,7 @@ fn activate(application: &gtk::Application) {
     let color_dialog = Rc::new(
         gtk::ColorDialog::builder()
             .title("Choose color")
-            .modal(false)
+            .modal(true)
             .build(),
     );
 
@@ -97,14 +97,14 @@ fn activate(application: &gtk::Application) {
                 color_dialog.choose_rgba(
                     None::<&gtk::Window>,
                     Some(&gtk::gdk::RGBA::RED),
-                    Some(&Cancellable::new()),
+                    None::<&Cancellable>,
                     glib::clone!(@strong color, @weak w => move |c| match c {
                         Ok(c) => {
                             gtk4_layer_shell::set_layer(&w, gtk4_layer_shell::Layer::Overlay);
                             *color.borrow_mut() = c;
                         },
-                        Err(e) => {
-                            eprintln!("error this is {}", e);
+                        Err(_) => {
+                            // Dismissed by user
                             gtk4_layer_shell::set_layer(&w, gtk4_layer_shell::Layer::Overlay);
                         }
                     }),
