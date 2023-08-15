@@ -31,7 +31,7 @@ jobs:
      container: alpine:edge
      steps:
      - uses: actions/checkout@v3
-     - run: apk --no-cache add git gcc g++ cmake binutils pkgconf meson ninja wayland-dev wayland-protocols libinput-dev libevdev-dev gtk4.0 gtk-doc vala rust cargo gdk-pixbuf2
+     - run: apk --no-cache add git gcc g++ cmake binutils pkgconf meson ninja wayland-dev wayland-protocols libinput-dev libevdev-dev gtk4.0 gtk-doc vala rust cargo gdk-pixbuf2 gdk-pixbuf
      - run: apk add gtk4-layer-shell --update-cache --repository http://dl-cdn.alpinelinux.org/alpine/edge/testing/ --allow-untrusted
      - run: export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig
      - run: export LD_LIBRARY_PATH=/usr/local/lib
