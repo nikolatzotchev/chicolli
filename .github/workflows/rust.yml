@@ -35,3 +35,7 @@ jobs:
      - run: apk add gtk4-layer-shell --update-cache --repository http://dl-cdn.alpinelinux.org/alpine/edge/testing/ --allow-untrusted
      - run: export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig
      - run: export LD_LIBRARY_PATH=/usr/local/lib
+     - name: Build
+       run: cargo build --verbose
+     - name: Run tests
+       run: cargo test --verbose
