@@ -9,7 +9,8 @@ jobs:
   build:
 
     runs-on: ubuntu-latest
-
+    container:
+      image: ghcr.io/gtk-rs/gtk4-rs/gtk4:latest
     steps:
     - uses: actions/checkout@v3
     - name: Apt update
