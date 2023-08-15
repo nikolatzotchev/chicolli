@@ -31,7 +31,7 @@ jobs:
      container: alpine:edge
      steps:
      - uses: actions/checkout@v3
-     - run: apk --no-cache add git gcc g++ binutils pkgconf meson ninja wayland-dev wayland-protocols libinput-dev libevdev-dev gtk4.0 gtk-doc-tools vala
+     - run: apk --no-cache add git gcc g++ binutils pkgconf meson ninja wayland-dev wayland-protocols libinput-dev libevdev-dev gtk4.0 gtk-doc vala
      - run: git clone https://github.com/wmww/gtk4-layer-shell
      - run: cd gtk4-layer-shell && meson setup -Dexamples=true -Ddocs=true -Dtests=true build && ninja -C build && sudo ninja -C build install && sudo ldconfig
      - run: export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig
