@@ -61,10 +61,59 @@ fn activate(application: &gtk::Application) {
             .build(),
     );
 
+    // get the tools cursors
+    let mut pencil_cur = gtk::gdk::Cursor::from_name("default", None);
+    let mut arrow_cur = gtk::gdk::Cursor::from_name("default", None);
+    let mut rectangle_cur = gtk::gdk::Cursor::from_name("default", None);
+
+    let cursors_loc = config::get_cursors_config_loc();
+    if let Some(curs_loc) = cursors_loc {
+        if curs_loc.as_path().exists() {
+            let paths = std::fs::read_dir(curs_loc.as_path());
+            if let Ok(paths) = paths {
+                for path in paths {
+                    if let Ok(path) = path {
+                        if let Some(file_name) = path.path().file_stem() {
+                            if let Some(file_name) = file_name.to_str() {
+                                let pixbuf = gtk::gdk_pixbuf::Pixbuf::from_file_at_scale(
+                                    path.path(),
+                                    30,
+                                    30,
+                                    true,
+                                )
+                                .unwrap();
+                                let cur_texture = gtk::gdk::Texture::for_pixbuf(&pixbuf);
+                                let cur =
+                                    Some(gtk::gdk::Cursor::from_texture(&cur_texture, 0, 0, None));
+
+                                match file_name {
+                                    config::PENCIL_CUR => {
+                                        pencil_cur = cur;
+                                    }
+                                    config::ARROW_CUR => {
+                                        arrow_cur = cur;
+                                    }
+                                    config::SQUARE_CUR => {
+                                        rectangle_cur = cur;
+                                    }
+                                    _ => (),
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Set up a widget
     let draw = gtk::DrawingArea::new();
+    // the default cursor should be the pencil one
+    if let Some(pencil_cur) = pencil_cur.clone() {
+        draw.set_cursor(Some(&pencil_cur));
+    }
 
-    key_controller.connect_key_pressed(glib::clone!(@weak draw, @strong window as w, @strong color_dialog, @strong conf, @strong color, @strong current_tool => @default-return Propagation::Proceed, move |_, keyval, _, _| {
+    key_controller.connect_key_pressed(glib::clone!(@strong draw, @strong window as w, @strong color_dialog, @strong conf, @strong color, @strong current_tool => @default-return Propagation::Proceed, move |_, keyval, _, _| {
         // close your eyes 
         let _draw_key = Key::from_name(conf.draw_keybind.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
         let _arrow_key = Key::from_name(conf.arrow_keybind.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
@@ -78,10 +127,30 @@ fn activate(application: &gtk::Application) {
 
         match keyval {
             // TOOLS
-            _ if _draw_key == keyval => *current_tool.borrow_mut() = drawing::drawing_tool::CurrentDrawingTool::NormalLine,
-            _ if _arrow_key == keyval => *current_tool.borrow_mut() = drawing::drawing_tool::CurrentDrawingTool::NormalArrowHeadPointer,
-            _ if _reverse_arrow_key == keyval => *current_tool.borrow_mut() = drawing::drawing_tool::CurrentDrawingTool::NormalArrowHeadBase,
-            _ if _rectangle_key == keyval => *current_tool.borrow_mut() = drawing::drawing_tool::CurrentDrawingTool::NormalRectangle,
+            _ if _draw_key == keyval => {
+                *current_tool.borrow_mut() = drawing::drawing_tool::CurrentDrawingTool::NormalLine;
+                if let Some(pencil_cur) = pencil_cur.clone() {
+                    draw.set_cursor(Some(&pencil_cur));
+                }
+            },
+            _ if _arrow_key == keyval => {
+                *current_tool.borrow_mut() = drawing::drawing_tool::CurrentDrawingTool::NormalArrowHeadPointer;
+                if let Some(arrow_cur) = arrow_cur.clone() {
+                    draw.set_cursor(Some(&arrow_cur));
+                }
+            }
+            _ if _reverse_arrow_key == keyval => {
+                *current_tool.borrow_mut() = drawing::drawing_tool::CurrentDrawingTool::NormalArrowHeadBase;
+                if let Some(arrow_cur) = arrow_cur.clone() {
+                    draw.set_cursor(Some(&arrow_cur));
+                }
+            }
+            _ if _rectangle_key == keyval => {
+                *current_tool.borrow_mut() = drawing::drawing_tool::CurrentDrawingTool::NormalRectangle;
+                if let Some(rectangle_cur) = rectangle_cur.clone() {
+                    draw.set_cursor(Some(&rectangle_cur));
+                }
+            },
             _ if _disable_drawing_key == keyval => {
                 gtk4_layer_shell::set_keyboard_mode(&w, gtk4_layer_shell::KeyboardMode::None);
                 w.surface().set_input_region(&Region::create());
@@ -214,16 +283,6 @@ fn activate(application: &gtk::Application) {
         gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
     );
 
-    // let ff = gtk::ColorDialog::builder().title("Choose color").build();
-    // ff.choose_rgba(
-    //     Some(&window),
-    //     Some(&gtk::gdk::RGBA::RED),
-    //     Some(&Cancellable::new()),
-    //     |c| match c {
-    //         Ok(c) => println!("hmm {}", c),
-    //         Err(_) => (),
-    //     },
-    // );
     window.set_child(Some(&draw));
     window.set_visible(true);
 }
