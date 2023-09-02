@@ -279,39 +279,6 @@ fn activate(application: &gtk::Application) {
         gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
     );
 
-    // let ff = gtk::ColorDialog::builder().title("Choose color").build();
-    // ff.choose_rgba(
-    //     Some(&window),
-    //     Some(&gtk::gdk::RGBA::RED),
-    //     Some(&Cancellable::new()),
-    //     |c| match c {
-    //         Ok(c) => println!("hmm {}", c),
-    //         Err(_) => (),
-    //     },
-    // );
-    //
-
-    // cursors
-    // let pencil_bytes = include_bytes!("../resources/pencil.png");
-    // let arrow_bytes = include_bytes!("../resources/arrow.png");
-    // let square_bytes = include_bytes!("../resources/square.png");
-    //
-    // let bytes = glib::Bytes::from(pencil_bytes);
-    // let texture = gtk::gdk::Texture::from_bytes(&bytes);
-    // if let Ok(t) = texture {
-    //     println!("{:?}", t);
-    //     let arrow = gtk::gdk::Cursor::from_texture(&t, 0, 0, Some(&gtk::gdk::Cursor::from_name("crosshair", None).unwrap()));
-    //     println!("{:?}", arrow);
-    //     draw.set_cursor(Some(&arrow));
-    // }
-    //
-    // let arrow = gtk::gdk::Cursor::from_name("crosshair", None);
-    // if let Some(cursor) = arrow {
-    //     println!("{:?}", cursor);
-    //     // draw.set_cursor(Some(&gtk::gdk::Cursor::from_name("crosshair", None).unwrap()));
-    //     draw.set_cursor(Some(&cursor));
-    // }
-    //
     window.set_child(Some(&draw));
     window.set_visible(true);
 }
