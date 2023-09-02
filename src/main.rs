@@ -60,8 +60,6 @@ fn activate(application: &gtk::Application) {
             .modal(true)
             .build(),
     );
-   
-    
 
     // get the tools cursors
     let mut pencil_cur = gtk::gdk::Cursor::from_name("default", None);
@@ -77,20 +75,27 @@ fn activate(application: &gtk::Application) {
                     if let Ok(path) = path {
                         if let Some(file_name) = path.path().file_stem() {
                             if let Some(file_name) = file_name.to_str() {
-                                let pixbuf = gtk::gdk_pixbuf::Pixbuf::from_file_at_scale(path.path(), 30, 30, true).unwrap();
+                                let pixbuf = gtk::gdk_pixbuf::Pixbuf::from_file_at_scale(
+                                    path.path(),
+                                    30,
+                                    30,
+                                    true,
+                                )
+                                .unwrap();
                                 let cur_texture = gtk::gdk::Texture::for_pixbuf(&pixbuf);
-                                let cur = Some(gtk::gdk::Cursor::from_texture(&cur_texture, 0, 0, None));
+                                let cur =
+                                    Some(gtk::gdk::Cursor::from_texture(&cur_texture, 0, 0, None));
 
                                 match file_name {
                                     config::PENCIL_CUR => {
                                         pencil_cur = cur;
-                                    },
+                                    }
                                     config::ARROW_CUR => {
                                         arrow_cur = cur;
-                                    },
-                                    config::SQUARE_CUR =>  {
+                                    }
+                                    config::SQUARE_CUR => {
                                         rectangle_cur = cur;
-                                    },
+                                    }
                                     _ => (),
                                 }
                             }
@@ -98,15 +103,15 @@ fn activate(application: &gtk::Application) {
                     }
                 }
             }
-        } 
+        }
     }
-   
+
     // Set up a widget
     let draw = gtk::DrawingArea::new();
     // the default cursor should be the pencil one
     if let Some(pencil_cur) = pencil_cur.clone() {
         draw.set_cursor(Some(&pencil_cur));
-    } 
+    }
 
     key_controller.connect_key_pressed(glib::clone!(@strong draw, @strong window as w, @strong color_dialog, @strong conf, @strong color, @strong current_tool => @default-return Propagation::Proceed, move |_, keyval, _, _| {
         // close your eyes 
@@ -122,7 +127,7 @@ fn activate(application: &gtk::Application) {
 
         match keyval {
             // TOOLS
-            _ if _draw_key == keyval => { 
+            _ if _draw_key == keyval => {
                 *current_tool.borrow_mut() = drawing::drawing_tool::CurrentDrawingTool::NormalLine;
                 if let Some(pencil_cur) = pencil_cur.clone() {
                     draw.set_cursor(Some(&pencil_cur));
@@ -133,20 +138,19 @@ fn activate(application: &gtk::Application) {
                 if let Some(arrow_cur) = arrow_cur.clone() {
                     draw.set_cursor(Some(&arrow_cur));
                 }
-            }  
+            }
             _ if _reverse_arrow_key == keyval => {
                 *current_tool.borrow_mut() = drawing::drawing_tool::CurrentDrawingTool::NormalArrowHeadBase;
                 if let Some(arrow_cur) = arrow_cur.clone() {
                     draw.set_cursor(Some(&arrow_cur));
                 }
-            }  
+            }
             _ if _rectangle_key == keyval => {
                 *current_tool.borrow_mut() = drawing::drawing_tool::CurrentDrawingTool::NormalRectangle;
                 if let Some(rectangle_cur) = rectangle_cur.clone() {
                     draw.set_cursor(Some(&rectangle_cur));
                 }
-
-            },           
+            },
             _ if _disable_drawing_key == keyval => {
                 gtk4_layer_shell::set_keyboard_mode(&w, gtk4_layer_shell::KeyboardMode::None);
                 w.surface().set_input_region(&Region::create());

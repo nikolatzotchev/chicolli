@@ -106,8 +106,8 @@ pub fn get_cursors_config_loc() -> Option<std::path::PathBuf> {
             conf_path.push(CONFIG_DIR);
             conf_path.push(CONFIG_CURSORS_DIR);
             Some(conf_path)
-        },
-        None => None
+        }
+        None => None,
     }
 }
 
