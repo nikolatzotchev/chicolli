@@ -73,8 +73,14 @@ impl Configuration {
     }
 }
 
+pub const PENCIL_CUR: &str = "pencil";
+pub const ARROW_CUR: &str = "arrow";
+pub const SQUARE_CUR: &str = "rectangle";
+
 const CONFIG_NAME: &str = "chicolli.json";
 const CONFIG_DIR: &str = "chicolli";
+const CONFIG_CURSORS_DIR: &str = "cursors";
+
 fn write_default_config(path: &std::path::Path) {
     let mut file = std::fs::File::create(path).unwrap();
     serde_json::to_writer_pretty(&mut file, &Configuration::default()).unwrap();
@@ -90,6 +96,18 @@ pub fn get_config() -> Configuration {
             );
             Configuration::default()
         }
+    }
+}
+
+pub fn get_cursors_config_loc() -> Option<std::path::PathBuf> {
+    let conf_path = config_dir();
+    match conf_path {
+        Some(mut conf_path) => {
+            conf_path.push(CONFIG_DIR);
+            conf_path.push(CONFIG_CURSORS_DIR);
+            Some(conf_path)
+        },
+        None => None
     }
 }
 
