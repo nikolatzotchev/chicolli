@@ -1,12 +1,12 @@
 use drawing::drawing_tool::DrawingTool;
 
-use gio::Cancellable;
 use gtk::glib::{self, Propagation};
 use gtk::{
     cairo::Region,
     gdk::{Display, Key},
     prelude::*,
 };
+use gtk4_layer_shell::{KeyboardMode, Layer, LayerShell};
 
 use std::{cell::RefCell, rc::Rc};
 
@@ -19,18 +19,24 @@ fn activate(application: &gtk::Application) {
     // Create a normal GTK window however you like
     let window = gtk::ApplicationWindow::new(application);
 
-    application.connect_activate(glib::clone!(@weak window => move |_| {
-        gtk4_layer_shell::set_keyboard_mode(&window, gtk4_layer_shell::KeyboardMode::Exclusive);
-        window.surface().set_opaque_region(Some(&Region::create()));
-    }));
+    application.connect_activate(glib::clone!(
+        #[weak]
+        window,
+        move |_| {
+            window.set_keyboard_mode(KeyboardMode::Exclusive);
+            if let Some(surface) = window.surface() {
+                surface.set_opaque_region(Some(&Region::create()));
+            }
+        },
+    ));
 
     let conf = Rc::new(config::get_config());
 
     // Before the window is first realized, set it up to be a layer surface
-    gtk4_layer_shell::init_for_window(&window);
-    gtk4_layer_shell::set_keyboard_mode(&window, gtk4_layer_shell::KeyboardMode::Exclusive);
+    window.init_layer_shell();
+    window.set_keyboard_mode(KeyboardMode::Exclusive);
     // Display above normal windows
-    gtk4_layer_shell::set_layer(&window, gtk4_layer_shell::Layer::Overlay);
+    window.set_layer(Layer::Overlay);
     // Anchors are if the window is pinned to each edge of the output
     let anchors = [
         (gtk4_layer_shell::Edge::Left, true),
@@ -40,7 +46,7 @@ fn activate(application: &gtk::Application) {
     ];
 
     for (anchor, state) in anchors {
-        gtk4_layer_shell::set_anchor(&window, anchor, state);
+        window.set_anchor(anchor, state);
     }
 
     // main components
@@ -113,92 +119,118 @@ fn activate(application: &gtk::Application) {
         draw.set_cursor(Some(&pencil_cur));
     }
 
-    key_controller.connect_key_pressed(glib::clone!(@strong draw, @strong window as w, @strong color_dialog, @strong conf, @strong color, @strong current_tool => @default-return Propagation::Proceed, move |_, keyval, _, _| {
-        // close your eyes 
-        let _draw_key = Key::from_name(conf.draw_keybind.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
-        let _arrow_key = Key::from_name(conf.arrow_keybind.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
-        let _reverse_arrow_key = Key::from_name(conf.reverse_arrow_keybind.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
-        let _rectangle_key = Key::from_name(conf.rectangle_keybind.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
-        let _disable_drawing_key = Key::from_name(conf.disable_drawing.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
-        let _color_r = Key::from_name(conf.color_r.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
-        let _color_g = Key::from_name(conf.color_g.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
-        let _color_b = Key::from_name(conf.color_b.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
-        let _color_chooser = Key::from_name(conf.color_chooser.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
+    key_controller.connect_key_pressed(glib::clone!(
+        #[strong]
+        draw,
+        #[strong(rename_to = w)]
+        window,
+        #[strong]
+        color_dialog,
+        #[strong]
+        conf,
+        #[strong]
+        color,
+        #[strong]
+        current_tool,
+        move |_, keyval, _, _| {
+            // close your eyes
+            let _draw_key = Key::from_name(conf.draw_keybind.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
+            let _arrow_key = Key::from_name(conf.arrow_keybind.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
+            let _reverse_arrow_key = Key::from_name(conf.reverse_arrow_keybind.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
+            let _rectangle_key = Key::from_name(conf.rectangle_keybind.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
+            let _disable_drawing_key = Key::from_name(conf.disable_drawing.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
+            let _color_r = Key::from_name(conf.color_r.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
+            let _color_g = Key::from_name(conf.color_g.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
+            let _color_b = Key::from_name(conf.color_b.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
+            let _color_chooser = Key::from_name(conf.color_chooser.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
 
-        match keyval {
-            // TOOLS
-            _ if _draw_key == keyval => {
-                *current_tool.borrow_mut() = drawing::drawing_tool::CurrentDrawingTool::NormalLine;
-                if let Some(pencil_cur) = pencil_cur.clone() {
-                    draw.set_cursor(Some(&pencil_cur));
+            match keyval {
+                // TOOLS
+                _ if _draw_key == keyval => {
+                    *current_tool.borrow_mut() = drawing::drawing_tool::CurrentDrawingTool::NormalLine;
+                    if let Some(pencil_cur) = pencil_cur.clone() {
+                        draw.set_cursor(Some(&pencil_cur));
+                    }
+                },
+                _ if _arrow_key == keyval => {
+                    *current_tool.borrow_mut() = drawing::drawing_tool::CurrentDrawingTool::NormalArrowHeadPointer;
+                    if let Some(arrow_cur) = arrow_cur.clone() {
+                        draw.set_cursor(Some(&arrow_cur));
+                    }
                 }
-            },
-            _ if _arrow_key == keyval => {
-                *current_tool.borrow_mut() = drawing::drawing_tool::CurrentDrawingTool::NormalArrowHeadPointer;
-                if let Some(arrow_cur) = arrow_cur.clone() {
-                    draw.set_cursor(Some(&arrow_cur));
+                _ if _reverse_arrow_key == keyval => {
+                    *current_tool.borrow_mut() = drawing::drawing_tool::CurrentDrawingTool::NormalArrowHeadBase;
+                    if let Some(arrow_cur) = arrow_cur.clone() {
+                        draw.set_cursor(Some(&arrow_cur));
+                    }
                 }
-            }
-            _ if _reverse_arrow_key == keyval => {
-                *current_tool.borrow_mut() = drawing::drawing_tool::CurrentDrawingTool::NormalArrowHeadBase;
-                if let Some(arrow_cur) = arrow_cur.clone() {
-                    draw.set_cursor(Some(&arrow_cur));
-                }
-            }
-            _ if _rectangle_key == keyval => {
-                *current_tool.borrow_mut() = drawing::drawing_tool::CurrentDrawingTool::NormalRectangle;
-                if let Some(rectangle_cur) = rectangle_cur.clone() {
-                    draw.set_cursor(Some(&rectangle_cur));
-                }
-            },
-            _ if _disable_drawing_key == keyval => {
-                gtk4_layer_shell::set_keyboard_mode(&w, gtk4_layer_shell::KeyboardMode::None);
-                w.surface().set_input_region(&Region::create());
-                w.unmap();
-                w.map();
-            },
-            // colors
-            _ if _color_r == keyval =>  *color.borrow_mut() = colors::RED,
-            _ if _color_g == keyval =>  *color.borrow_mut() = colors::GREEN,
-            _ if _color_b == keyval =>  *color.borrow_mut() = colors::BLUE,
-            _ if _color_chooser == keyval => {
-                gtk4_layer_shell::set_layer(&w, gtk4_layer_shell::Layer::Bottom);
-                color_dialog.choose_rgba(
-                    None::<&gtk::Window>,
-                    Some(&gtk::gdk::RGBA::RED),
-                    None::<&Cancellable>,
-                    glib::clone!(@strong color, @weak w => move |c| match c {
-                        Ok(c) => {
-                            gtk4_layer_shell::set_layer(&w, gtk4_layer_shell::Layer::Overlay);
-                            *color.borrow_mut() = c;
-                        },
-                        Err(_) => {
-                            // Dismissed by user
-                            gtk4_layer_shell::set_layer(&w, gtk4_layer_shell::Layer::Overlay);
-                        }
-                    }),
+                _ if _rectangle_key == keyval => {
+                    *current_tool.borrow_mut() = drawing::drawing_tool::CurrentDrawingTool::NormalRectangle;
+                    if let Some(rectangle_cur) = rectangle_cur.clone() {
+                        draw.set_cursor(Some(&rectangle_cur));
+                    }
+                },
+                _ if _disable_drawing_key == keyval => {
+                    w.set_keyboard_mode(KeyboardMode::None);
+                    if let Some(surface) = w.surface() {
+                        surface.set_input_region(&Region::create());
+                    }
+                    w.unmap();
+                    w.map();
+                },
+                // colors
+                _ if _color_r == keyval =>  *color.borrow_mut() = colors::RED,
+                _ if _color_g == keyval =>  *color.borrow_mut() = colors::GREEN,
+                _ if _color_b == keyval =>  *color.borrow_mut() = colors::BLUE,
+                _ if _color_chooser == keyval => {
+                    w.set_layer(Layer::Bottom);
+                    color_dialog.choose_rgba(
+                        None::<&gtk::Window>,
+                        Some(&gtk::gdk::RGBA::RED),
+                        None::<&gio::Cancellable>,
+                        glib::clone!(
+                            #[strong]
+                            color,
+                            #[weak]
+                            w,
+                            move |c| match c {
+                                Ok(c) => {
+                                    w.set_layer(Layer::Overlay);
+                                    *color.borrow_mut() = c;
+                                },
+                                Err(_) => {
+                                    // Dismissed by user
+                                    w.set_layer(Layer::Overlay);
+                                }
+                            },
+                        ),
                     );
-            },
-            _ => (),
-        };
-        Propagation::Proceed
-    }));
+                },
+                _ => (),
+            };
+            Propagation::Proceed
+        },
+    ));
 
     // key controller is added to the window and not to the drawarea because there it does not
     // work
     window.add_controller(key_controller);
 
     let motion_controller = gtk::EventControllerMotion::new();
-    motion_controller.connect_motion(
-        glib::clone!(@weak draw, @strong elements => move |_, x, y| {
+    motion_controller.connect_motion(glib::clone!(
+        #[weak]
+        draw,
+        #[strong]
+        elements,
+        move |_, x, y| {
             if let Some(elem) = elements.borrow_mut().last_mut() {
                 elem.motion_notify(drawing::drawing_tool::Point(x, y));
                 if elem.active() {
-                     draw.queue_draw();
+                    draw.queue_draw();
                 }
             }
-        }),
-    );
+        },
+    ));
 
     draw.add_controller(motion_controller);
 
@@ -223,24 +255,36 @@ fn activate(application: &gtk::Application) {
     left_click_mouse.set_button(gtk::gdk::ffi::GDK_BUTTON_PRIMARY as u32);
 
     // Assign your handler to an event of the gesture (e.g. the `pressed` event)
-    left_click_mouse.connect_pressed(glib::clone!(@strong elements, @strong current_tool, @strong line_width => move |_, _, x, y| {
-        let mut drawing_tool: Box<dyn drawing::drawing_tool::DrawingTool> = match *current_tool.borrow() {
-            drawing::drawing_tool::CurrentDrawingTool::NormalLine => Box::new(drawing::normal_line::NormalLine::new()),
-            drawing::drawing_tool::CurrentDrawingTool::NormalArrowHeadBase => Box::new(drawing::arrow::NormalArrow::new(true)),
-            drawing::drawing_tool::CurrentDrawingTool::NormalArrowHeadPointer => Box::new(drawing::arrow::NormalArrow::new(false)),
-            drawing::drawing_tool::CurrentDrawingTool::NormalRectangle => Box::new(drawing::normal_rectangle::NormalRectangle::new()),
-        };
-        drawing_tool.press_mouse(drawing::drawing_tool::Point(x, y));
-        drawing_tool.set_line_width(*line_width.borrow());
-        drawing_tool.set_color(*color.borrow());
-        elements.borrow_mut().push(drawing_tool);
-    }));
+    left_click_mouse.connect_pressed(glib::clone!(
+        #[strong]
+        elements,
+        #[strong]
+        current_tool,
+        #[strong]
+        line_width,
+        move |_, _, x, y| {
+            let mut drawing_tool: Box<dyn drawing::drawing_tool::DrawingTool> = match *current_tool.borrow() {
+                drawing::drawing_tool::CurrentDrawingTool::NormalLine => Box::new(drawing::normal_line::NormalLine::new()),
+                drawing::drawing_tool::CurrentDrawingTool::NormalArrowHeadBase => Box::new(drawing::arrow::NormalArrow::new(true)),
+                drawing::drawing_tool::CurrentDrawingTool::NormalArrowHeadPointer => Box::new(drawing::arrow::NormalArrow::new(false)),
+                drawing::drawing_tool::CurrentDrawingTool::NormalRectangle => Box::new(drawing::normal_rectangle::NormalRectangle::new()),
+            };
+            drawing_tool.press_mouse(drawing::drawing_tool::Point(x, y));
+            drawing_tool.set_line_width(*line_width.borrow());
+            drawing_tool.set_color(*color.borrow());
+            elements.borrow_mut().push(drawing_tool);
+        },
+    ));
 
-    left_click_mouse.connect_released(glib::clone!(@strong elements => move |_, _, x, y| {
-        if let Some(elem) = elements.borrow_mut().last_mut() {
-            elem.release_mouse(drawing::drawing_tool::Point(x, y));
-        }
-    }));
+    left_click_mouse.connect_released(glib::clone!(
+        #[strong]
+        elements,
+        move |_, _, x, y| {
+            if let Some(elem) = elements.borrow_mut().last_mut() {
+                elem.release_mouse(drawing::drawing_tool::Point(x, y));
+            }
+        },
+    ));
 
     draw.add_controller(left_click_mouse);
 
@@ -248,8 +292,10 @@ fn activate(application: &gtk::Application) {
     let scroll_controller =
         gtk::EventControllerScroll::new(gtk::EventControllerScrollFlags::BOTH_AXES);
 
-    scroll_controller.connect_scroll(
-        glib::clone!(@strong line_width => @default-return Propagation::Proceed, move |_, _,  scroll| {
+    scroll_controller.connect_scroll(glib::clone!(
+        #[strong]
+        line_width,
+        move |_, _, scroll| {
             let mut width = line_width.borrow_mut();
             let new_width = *width - scroll;
             if new_width as i32 >= 1 {
@@ -258,21 +304,24 @@ fn activate(application: &gtk::Application) {
                 *width = 1.0;
             }
             Propagation::Proceed
-        }),
-    );
+        },
+    ));
 
     draw.add_controller(scroll_controller);
 
-    draw.set_draw_func(glib::clone!(@weak elements => move |_, ctx, _, _| {
+    draw.set_draw_func(glib::clone!(
+        #[weak]
+        elements,
+        move |_, ctx, _, _| {
+            for element in elements.borrow_mut().iter() {
+                element.draw(ctx);
+            }
 
-        for element in elements.borrow_mut().iter() {
-            element.draw(ctx);
-        }
-
-        if let Err(error) = ctx.fill() {
-            panic!("error drawing: {:?}", error)
-        };
-    }));
+            if let Err(error) = ctx.fill() {
+                panic!("error drawing: {:?}", error)
+            };
+        },
+    ));
 
     // load css for the transparency of the window
     let provider = gtk::CssProvider::new();
