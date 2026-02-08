@@ -363,7 +363,21 @@ fn activate(application: &gtk::Application) {
         line_width,
         #[strong]
         text_input_mode,
+        #[weak]
+        draw,
         move |_, _, x, y| {
+            {
+                let mut elems = elements.borrow_mut();
+                if let Some(elem) = elems.last_mut() {
+                    if let Some(text_tool) = elem.as_any_mut().downcast_mut::<drawing::text_label::TextLabel>() {
+                        if text_tool.is_movable() {
+                            text_tool.finalize();
+                            draw.queue_draw();
+                            return;
+                        }
+                    }
+                }
+            }
             let mut drawing_tool: Box<dyn drawing::drawing_tool::DrawingTool> = match *current_tool.borrow() {
                 drawing::drawing_tool::CurrentDrawingTool::NormalLine => Box::new(drawing::normal_line::NormalLine::new()),
                 drawing::drawing_tool::CurrentDrawingTool::NormalArrowHeadBase => Box::new(drawing::arrow::NormalArrow::new(true)),

@@ -9,6 +9,7 @@ pub struct TextLabel {
     text: String,
     finished: bool,
     placed: bool,
+    movable: bool,
     line_width: f64,
     color: colors::Color,
 }
@@ -20,6 +21,7 @@ impl TextLabel {
             text: String::new(),
             finished: false,
             placed: false,
+            movable: false,
             line_width: 5.0,
             color: colors::RED,
         }
@@ -35,6 +37,15 @@ impl TextLabel {
 
     pub fn finish(&mut self) {
         self.finished = true;
+        self.movable = true;
+    }
+
+    pub fn finalize(&mut self) {
+        self.movable = false;
+    }
+
+    pub fn is_movable(&self) -> bool {
+        self.movable
     }
 
     pub fn is_placed(&self) -> bool {
@@ -50,7 +61,11 @@ impl DrawingTool for TextLabel {
 
     fn release_mouse(&mut self, _: Point) {}
 
-    fn motion_notify(&mut self, _: Point) {}
+    fn motion_notify(&mut self, point: Point) {
+        if self.movable {
+            self.position = Some(point);
+        }
+    }
 
     fn draw(&self, ctx: &gtk::cairo::Context) {
         if let Some(pos) = self.position {
@@ -85,7 +100,7 @@ impl DrawingTool for TextLabel {
     }
 
     fn active(&mut self) -> bool {
-        return self.placed && !self.finished;
+        return (self.placed && !self.finished) || self.movable;
     }
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
