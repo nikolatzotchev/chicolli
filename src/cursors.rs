@@ -22,17 +22,21 @@ fn surface_to_cursor(surface: &mut gtk::cairo::ImageSurface, hotspot_x: i32, hot
     ))
 }
 
+const PENCIL_TIP_X: f64 = 3.0;
+const PENCIL_TIP_Y: f64 = 28.0;
+const PENCIL_ANGLE: f64 = -std::f64::consts::FRAC_PI_4;
+
 fn pencil_path(cr: &gtk::cairo::Context) {
     cr.save().unwrap();
-    cr.translate(5.0, 27.0);
-    cr.rotate(-std::f64::consts::FRAC_PI_4);
+    cr.translate(PENCIL_TIP_X, PENCIL_TIP_Y);
+    cr.rotate(PENCIL_ANGLE);
 
-    cr.rectangle(0.0, -4.0, 22.0, 8.0);
-    cr.move_to(-5.0, 0.0);
-    cr.line_to(0.0, -4.0);
-    cr.line_to(0.0, 4.0);
+    cr.move_to(0.0, 0.0);
+    cr.line_to(5.0, -3.5);
+    cr.line_to(5.0, 3.5);
     cr.close_path();
-    cr.rectangle(22.0, -4.0, 5.0, 8.0);
+    cr.rectangle(5.0, -3.5, 18.0, 7.0);
+    cr.rectangle(23.0, -3.5, 4.0, 7.0);
 
     cr.restore().unwrap();
 }
@@ -52,40 +56,40 @@ pub fn pencil_cursor() -> Option<gdk::Cursor> {
 
         // Filled shapes
         cr.save().ok()?;
-        cr.translate(5.0, 27.0);
-        cr.rotate(-std::f64::consts::FRAC_PI_4);
-
-        cr.set_source_rgb(0.95, 0.85, 0.2);
-        cr.rectangle(0.0, -4.0, 22.0, 8.0);
-        cr.fill().ok()?;
+        cr.translate(PENCIL_TIP_X, PENCIL_TIP_Y);
+        cr.rotate(PENCIL_ANGLE);
 
         cr.set_source_rgb(0.4, 0.4, 0.4);
-        cr.move_to(-5.0, 0.0);
-        cr.line_to(0.0, -4.0);
-        cr.line_to(0.0, 4.0);
+        cr.move_to(0.0, 0.0);
+        cr.line_to(5.0, -3.5);
+        cr.line_to(5.0, 3.5);
         cr.close_path();
         cr.fill().ok()?;
 
+        cr.set_source_rgb(0.95, 0.85, 0.2);
+        cr.rectangle(5.0, -3.5, 18.0, 7.0);
+        cr.fill().ok()?;
+
         cr.set_source_rgb(0.9, 0.5, 0.5);
-        cr.rectangle(22.0, -4.0, 5.0, 8.0);
+        cr.rectangle(23.0, -3.5, 4.0, 7.0);
         cr.fill().ok()?;
 
         // Dark inner outlines
         cr.set_source_rgb(0.0, 0.0, 0.0);
         cr.set_line_width(1.0);
-        cr.rectangle(0.0, -4.0, 22.0, 8.0);
-        cr.stroke().ok()?;
-        cr.move_to(-5.0, 0.0);
-        cr.line_to(0.0, -4.0);
-        cr.line_to(0.0, 4.0);
+        cr.move_to(0.0, 0.0);
+        cr.line_to(5.0, -3.5);
+        cr.line_to(5.0, 3.5);
         cr.close_path();
         cr.stroke().ok()?;
-        cr.rectangle(22.0, -4.0, 5.0, 8.0);
+        cr.rectangle(5.0, -3.5, 18.0, 7.0);
+        cr.stroke().ok()?;
+        cr.rectangle(23.0, -3.5, 4.0, 7.0);
         cr.stroke().ok()?;
 
         cr.restore().ok()?;
     }
-    surface_to_cursor(&mut surface, 2, 30)
+    surface_to_cursor(&mut surface, PENCIL_TIP_X as i32, PENCIL_TIP_Y as i32)
 }
 
 fn arrow_path(cr: &gtk::cairo::Context, x1: f64, y1: f64, x2: f64, y2: f64, head_len: f64, a1: f64, a2: f64) {
@@ -214,9 +218,12 @@ pub fn text_cursor() -> Option<gdk::Cursor> {
     surface_to_cursor(&mut surface, 16, 16)
 }
 
+const HIGHLIGHTER_ORIGIN_X: f64 = 6.0;
+const HIGHLIGHTER_ORIGIN_Y: f64 = 24.0;
+
 fn highlighter_path(cr: &gtk::cairo::Context) {
     cr.save().unwrap();
-    cr.translate(4.0, 28.0);
+    cr.translate(HIGHLIGHTER_ORIGIN_X, HIGHLIGHTER_ORIGIN_Y);
     cr.rotate(-std::f64::consts::FRAC_PI_4);
 
     cr.move_to(-3.0, -5.0);
@@ -228,6 +235,14 @@ fn highlighter_path(cr: &gtk::cairo::Context) {
     cr.rectangle(23.0, -5.0, 5.0, 10.0);
 
     cr.restore().unwrap();
+}
+
+fn highlighter_tip() -> (i32, i32) {
+    let angle = -std::f64::consts::FRAC_PI_4;
+    let tip_local_x: f64 = -3.0;
+    let x = HIGHLIGHTER_ORIGIN_X + tip_local_x * angle.cos();
+    let y = HIGHLIGHTER_ORIGIN_Y + tip_local_x * angle.sin();
+    (x.round() as i32, y.round() as i32)
 }
 
 pub fn highlighter_cursor() -> Option<gdk::Cursor> {
@@ -245,7 +260,7 @@ pub fn highlighter_cursor() -> Option<gdk::Cursor> {
 
         // Filled shapes
         cr.save().ok()?;
-        cr.translate(4.0, 28.0);
+        cr.translate(HIGHLIGHTER_ORIGIN_X, HIGHLIGHTER_ORIGIN_Y);
         cr.rotate(-std::f64::consts::FRAC_PI_4);
 
         cr.set_source_rgba(1.0, 1.0, 0.0, 0.8);
@@ -280,5 +295,6 @@ pub fn highlighter_cursor() -> Option<gdk::Cursor> {
 
         cr.restore().ok()?;
     }
-    surface_to_cursor(&mut surface, 2, 30)
+    let (hx, hy) = highlighter_tip();
+    surface_to_cursor(&mut surface, hx, hy)
 }

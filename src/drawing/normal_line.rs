@@ -6,6 +6,14 @@ use crate::colors;
 
 use super::drawing_tool::{DrawingTool, Point};
 
+const MIN_POINT_DISTANCE_SQ: f64 = 4.0;
+
+fn distance_sq(a: &Point, b: &Point) -> f64 {
+    let dx = a.0 - b.0;
+    let dy = a.1 - b.1;
+    dx * dx + dy * dy
+}
+
 pub struct NormalLine {
     points: Vec<Point>,
     finished: bool,
@@ -25,11 +33,10 @@ impl NormalLine {
         }
     }
 }
+
 // https://www.ibiblio.org/e-notes/Splines/b-int.html
-pub fn calc_whole_spline(points: &Vec<Point>) -> Vec<Point> {
+pub fn calc_whole_spline(points: &[Point]) -> Vec<Point> {
     let num_points = points.len();
-    // it does not work with less than 4 points, but this does not affect us since adding
-    // points happens fast
     if num_points < 4 {
         return vec![];
     }
@@ -37,7 +44,6 @@ pub fn calc_whole_spline(points: &Vec<Point>) -> Vec<Point> {
     let mut b = vec![0.0; num_points];
     b[1] = -0.25;
     let mut d = vec![Point(0.0, 0.0); num_points];
-    // maybe try to set these values better in the future
     d[0] = (points[1] - points[0]) / 3.0;
     d[num_points - 1] = (points[num_points - 1] - points[num_points - 2]) / 3.0;
 
@@ -53,21 +59,34 @@ pub fn calc_whole_spline(points: &Vec<Point>) -> Vec<Point> {
 }
 
 impl DrawingTool for NormalLine {
-    fn release_mouse(&mut self, _: Point) {
+    fn release_mouse(&mut self, point: Point) {
+        if self.active() && (self.points.is_empty() || distance_sq(self.points.last().unwrap(), &point) > 0.0) {
+            self.points.push(point);
+        }
         self.finished = true;
     }
 
-    fn press_mouse(&mut self, _: Point) {
+    fn press_mouse(&mut self, point: Point) {
         self.started = true;
+        self.points.push(point);
     }
 
     fn motion_notify(&mut self, point: Point) {
         if self.active() {
+            if let Some(last) = self.points.last() {
+                if distance_sq(last, &point) < MIN_POINT_DISTANCE_SQ {
+                    return;
+                }
+            }
             self.points.push(point);
         }
     }
 
-    fn draw(&self, ctx: &Context) -> () {
+    fn draw(&self, ctx: &Context) {
+        if self.points.is_empty() {
+            return;
+        }
+
         let color = self.color;
         ctx.set_source_rgb(
             color.red().into(),
@@ -78,26 +97,62 @@ impl DrawingTool for NormalLine {
         ctx.set_line_cap(gtk::cairo::LineCap::Round);
         ctx.set_line_join(gtk::cairo::LineJoin::Round);
 
-        if self.points.len() > 3 {
-            let controls = calc_whole_spline(&self.points);
-            let first_point = self.points[0];
-            ctx.move_to(first_point.0, first_point.1);
-            for i in 0..self.points.len() - 2 {
-                let p_0 = self.points[i];
-                let p_1 = self.points[i + 1];
-                ctx.curve_to(
-                    p_0.0 + controls[i].0,
-                    p_0.1 + controls[i].1,
-                    p_1.0 - controls[i + 1].0,
-                    p_1.1 - controls[i + 1].1,
-                    p_1.0,
-                    p_1.1,
-                )
+        let n = self.points.len();
+
+        if n == 1 {
+            let p = self.points[0];
+            ctx.arc(p.0, p.1, self.line_width / 2.0, 0.0, std::f64::consts::TAU);
+            if let Err(e) = ctx.fill() {
+                panic!("{e}");
             }
-            match ctx.stroke() {
-                Err(e) => panic!("{e}"),
-                _ => (),
+            return;
+        }
+
+        if n == 2 {
+            ctx.move_to(self.points[0].0, self.points[0].1);
+            ctx.line_to(self.points[1].0, self.points[1].1);
+            if let Err(e) = ctx.stroke() {
+                panic!("{e}");
             }
+            return;
+        }
+
+        if n == 3 {
+            let p0 = self.points[0];
+            let p1 = self.points[1];
+            let p2 = self.points[2];
+            ctx.move_to(p0.0, p0.1);
+            ctx.curve_to(
+                p0.0 + (p1.0 - p0.0) * 0.5,
+                p0.1 + (p1.1 - p0.1) * 0.5,
+                p1.0 + (p2.0 - p1.0) * 0.5,
+                p1.1 + (p2.1 - p1.1) * 0.5,
+                p2.0,
+                p2.1,
+            );
+            if let Err(e) = ctx.stroke() {
+                panic!("{e}");
+            }
+            return;
+        }
+
+        let controls = calc_whole_spline(&self.points);
+        let first_point = self.points[0];
+        ctx.move_to(first_point.0, first_point.1);
+        for i in 0..n - 1 {
+            let p_0 = self.points[i];
+            let p_1 = self.points[i + 1];
+            ctx.curve_to(
+                p_0.0 + controls[i].0,
+                p_0.1 + controls[i].1,
+                p_1.0 - controls[i + 1].0,
+                p_1.1 - controls[i + 1].1,
+                p_1.0,
+                p_1.1,
+            );
+        }
+        if let Err(e) = ctx.stroke() {
+            panic!("{e}");
         }
     }
 
@@ -110,7 +165,7 @@ impl DrawingTool for NormalLine {
     }
 
     fn active(&mut self) -> bool {
-        return self.started && !self.finished;
+        self.started && !self.finished
     }
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
