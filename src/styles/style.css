@@ -2,3 +2,63 @@ window.background {
    background-color: rgba(0, 0, 0, 0.0);
 }
 
+.toolbar-palette {
+   background-color: rgba(30, 30, 30, 0.85);
+   border-radius: 8px;
+   padding: 4px 8px;
+}
+
+.toolbar-label {
+   color: rgba(255, 255, 255, 0.95);
+   font-size: 13px;
+   font-weight: bold;
+   padding: 0 4px;
+}
+
+.toolbar-swatch {
+   border-radius: 3px;
+}
+
+.toolbar-tool-btn {
+   background: rgba(255, 255, 255, 0.08);
+   color: rgba(255, 255, 255, 0.9);
+   border: 1px solid rgba(255, 255, 255, 0.15);
+   border-radius: 4px;
+   padding: 2px 8px;
+   font-size: 12px;
+   font-weight: bold;
+   min-height: 0;
+   min-width: 0;
+}
+
+.toolbar-tool-btn:checked {
+   background: rgba(100, 160, 255, 0.5);
+   border-color: rgba(100, 160, 255, 0.8);
+}
+
+.toolbar-tool-btn:hover {
+   background: rgba(255, 255, 255, 0.18);
+}
+
+.toolbar-tool-btn:checked:hover {
+   background: rgba(100, 160, 255, 0.6);
+}
+
+.toolbar-color-btn {
+   background: transparent;
+   border: none;
+   border-radius: 4px;
+   padding: 2px;
+   min-height: 0;
+   min-width: 0;
+}
+
+.toolbar-color-btn:hover {
+   background: rgba(255, 255, 255, 0.15);
+}
+
+.toolbar-sep {
+   background: rgba(255, 255, 255, 0.2);
+   min-width: 1px;
+   margin: 2px 4px;
+}

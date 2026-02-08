@@ -15,6 +15,7 @@ pub mod colors;
 pub mod config;
 pub mod cursors;
 pub mod drawing;
+pub mod toolbar;
 
 // https://github.com/wmww/gtk-layer-shell/blob/master/examples/simple-example.c
 fn activate(application: &gtk::Application) {
@@ -99,6 +100,123 @@ fn activate(application: &gtk::Application) {
         draw.set_cursor(Some(&pencil_cur));
     }
 
+    let line_width = Rc::new(RefCell::new(conf.line_thickness.unwrap_or(2.0)));
+
+    let toolbar = Rc::new(RefCell::new(toolbar::Toolbar::new()));
+    toolbar.borrow().update(
+        &drawing::drawing_tool::CurrentDrawingTool::NormalLine,
+        &colors::RED,
+        conf.line_thickness.unwrap_or(2.0),
+    );
+
+    toolbar.borrow().connect_tool_selected(glib::clone!(
+        #[strong]
+        current_tool,
+        #[strong]
+        draw,
+        #[strong]
+        pencil_cur,
+        #[strong]
+        arrow_cur,
+        #[strong]
+        rectangle_cur,
+        #[strong]
+        text_cur,
+        #[strong]
+        highlighter_cur,
+        move |tool| {
+            *current_tool.borrow_mut() = tool;
+            let cursor = match tool {
+                drawing::drawing_tool::CurrentDrawingTool::NormalLine => pencil_cur.clone(),
+                drawing::drawing_tool::CurrentDrawingTool::NormalArrowHeadBase
+                | drawing::drawing_tool::CurrentDrawingTool::NormalArrowHeadPointer => arrow_cur.clone(),
+                drawing::drawing_tool::CurrentDrawingTool::NormalRectangle => rectangle_cur.clone(),
+                drawing::drawing_tool::CurrentDrawingTool::TextLabel => text_cur.clone(),
+                drawing::drawing_tool::CurrentDrawingTool::Highlighter => highlighter_cur.clone(),
+            };
+            if let Some(c) = cursor {
+                draw.set_cursor(Some(&c));
+            }
+        },
+    ));
+
+    toolbar.borrow().connect_swatch_clicked(glib::clone!(
+        #[strong(rename_to = w)]
+        window,
+        #[strong]
+        color_dialog,
+        #[strong]
+        color,
+        #[strong]
+        toolbar,
+        #[strong]
+        current_tool,
+        #[strong]
+        line_width,
+        move || {
+            w.set_layer(Layer::Bottom);
+            color_dialog.choose_rgba(
+                None::<&gtk::Window>,
+                Some(&*color.borrow()),
+                None::<&gio::Cancellable>,
+                glib::clone!(
+                    #[strong]
+                    color,
+                    #[strong]
+                    toolbar,
+                    #[strong]
+                    current_tool,
+                    #[strong]
+                    line_width,
+                    #[weak]
+                    w,
+                    move |c| match c {
+                        Ok(c) => {
+                            w.set_layer(Layer::Overlay);
+                            *color.borrow_mut() = c;
+                            toolbar.borrow().update(&current_tool.borrow(), &c, *line_width.borrow());
+                        },
+                        Err(_) => {
+                            w.set_layer(Layer::Overlay);
+                        }
+                    },
+                ),
+            );
+        },
+    ));
+
+    toolbar.borrow().connect_preset_selected(glib::clone!(
+        #[strong]
+        color,
+        #[strong]
+        toolbar,
+        #[strong]
+        current_tool,
+        #[strong]
+        line_width,
+        move |rgba| {
+            *color.borrow_mut() = rgba;
+            toolbar.borrow().update(&current_tool.borrow(), &rgba, *line_width.borrow());
+        },
+    ));
+
+    toolbar.borrow().connect_line_width_changed(glib::clone!(
+        #[strong]
+        line_width,
+        #[strong]
+        toolbar,
+        #[strong]
+        current_tool,
+        #[strong]
+        color,
+        move |delta| {
+            let mut width = line_width.borrow_mut();
+            let new_width = *width + delta;
+            *width = if new_width < 1.0 { 1.0 } else { new_width };
+            toolbar.borrow().update(&current_tool.borrow(), &color.borrow(), *width);
+        },
+    ));
+
     key_controller.connect_key_pressed(glib::clone!(
         #[strong]
         draw,
@@ -116,6 +234,10 @@ fn activate(application: &gtk::Application) {
         text_input_mode,
         #[strong]
         elements,
+        #[strong]
+        toolbar,
+        #[strong]
+        line_width,
         move |_, keyval, _, modifier| {
             if *text_input_mode.borrow() {
                 let _draw_key = Key::from_name(conf.draw_keybind.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
@@ -260,15 +382,21 @@ fn activate(application: &gtk::Application) {
                         glib::clone!(
                             #[strong]
                             color,
+                            #[strong]
+                            toolbar,
+                            #[strong]
+                            current_tool,
+                            #[strong]
+                            line_width,
                             #[weak]
                             w,
                             move |c| match c {
                                 Ok(c) => {
                                     w.set_layer(Layer::Overlay);
                                     *color.borrow_mut() = c;
+                                    toolbar.borrow().update(&current_tool.borrow(), &c, *line_width.borrow());
                                 },
                                 Err(_) => {
-                                    // Dismissed by user
                                     w.set_layer(Layer::Overlay);
                                 }
                             },
@@ -277,6 +405,7 @@ fn activate(application: &gtk::Application) {
                 },
                 _ => (),
             };
+            toolbar.borrow().update(&current_tool.borrow(), &color.borrow(), *line_width.borrow());
             Propagation::Proceed
         },
     ));
@@ -316,8 +445,6 @@ fn activate(application: &gtk::Application) {
 
     draw.add_controller(right_click_mouse);
 
-    let line_width = Rc::new(RefCell::new(conf.line_thickness.unwrap_or(2.0)));
-
     let left_click_mouse = gtk::GestureClick::new();
 
     // Set the gestures button to the right mouse button (=3)
@@ -333,6 +460,8 @@ fn activate(application: &gtk::Application) {
         line_width,
         #[strong]
         text_input_mode,
+        #[strong]
+        color,
         #[weak]
         draw,
         move |_, _, x, y| {
@@ -391,6 +520,12 @@ fn activate(application: &gtk::Application) {
         text_input_mode,
         #[strong]
         elements,
+        #[strong]
+        toolbar,
+        #[strong]
+        current_tool,
+        #[strong]
+        color,
         #[weak]
         draw,
         #[upgrade_or]
@@ -409,6 +544,7 @@ fn activate(application: &gtk::Application) {
                 }
                 draw.queue_draw();
             }
+            toolbar.borrow().update(&current_tool.borrow(), &color.borrow(), *width);
             Propagation::Proceed
         },
     ));
@@ -438,7 +574,11 @@ fn activate(application: &gtk::Application) {
         gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
     );
 
-    window.set_child(Some(&draw));
+    let overlay = gtk::Overlay::new();
+    overlay.set_child(Some(&draw));
+    overlay.add_overlay(toolbar.borrow().widget());
+
+    window.set_child(Some(&overlay));
     window.set_visible(true);
 }
 

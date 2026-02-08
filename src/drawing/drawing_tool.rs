@@ -45,7 +45,7 @@ impl std::ops::Neg for Point {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CurrentDrawingTool {
     NormalLine,
     NormalArrowHeadBase,
