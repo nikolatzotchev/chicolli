@@ -345,8 +345,10 @@ fn activate(application: &gtk::Application) {
                 },
             };
             drawing_tool.press_mouse(drawing::drawing_tool::Point(x, y));
-            drawing_tool.set_line_width(*line_width.borrow());
-            drawing_tool.set_color(*color.borrow());
+            if !matches!(*current_tool.borrow(), drawing::drawing_tool::CurrentDrawingTool::Highlighter) {
+                drawing_tool.set_line_width(*line_width.borrow());
+                drawing_tool.set_color(*color.borrow());
+            }
             elements.borrow_mut().push(drawing_tool);
         },
     ));

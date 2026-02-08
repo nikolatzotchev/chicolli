@@ -22,8 +22,8 @@ impl Highlighter {
             points: Vec::new(),
             finished: false,
             started: false,
-            line_width: 40.0,
-            color: colors::RED,
+            line_width: 20.0,
+            color: colors::YELLOW,
             alpha: 0.4,
         }
     }
