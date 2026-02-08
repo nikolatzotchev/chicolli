@@ -7,6 +7,8 @@ A GTK4 shell drawing tool for Wayland. Renders a transparent fullscreen overlay 
 - Freehand drawing with B-spline interpolation
 - Arrows (with reversible direction)
 - Rectangles
+- Text labels (click to place, type to annotate)
+- Highlighter (semi-transparent freehand drawing for highlighting)
 - Quick color switching (red, green, blue) and a color chooser dialog
 - Adjustable line thickness via scroll wheel
 - Custom cursors per tool
@@ -95,11 +97,15 @@ On first run, the config file is created automatically with default values. You 
   "arrow_keybind": "2",
   "reverse_arrow_keybind": "3",
   "rectangle_keybind": "4",
+  "text_keybind": "5",
+  "highlighter_keybind": "6",
   "disable_drawing": "d",
   "color_r": "r",
   "color_g": "g",
   "color_b": "b",
-  "color_chooser": "c"
+  "color_chooser": "c",
+  "undo": "z",
+  "clear_all": "x"
 }
 ```
 
@@ -112,11 +118,15 @@ On first run, the config file is created automatically with default values. You 
 | `arrow_keybind` | string | `"2"` | Key to switch to the arrow tool (arrowhead at pointer end). |
 | `reverse_arrow_keybind` | string | `"3"` | Key to switch to the reverse arrow tool (arrowhead at start). |
 | `rectangle_keybind` | string | `"4"` | Key to switch to the rectangle tool. |
+| `text_keybind` | string | `"5"` | Key to switch to the text label tool. Click to place, type to enter text, press Enter or Escape to finish. |
+| `highlighter_keybind` | string | `"6"` | Key to switch to the highlighter tool. Draws semi-transparent strokes for highlighting. |
 | `disable_drawing` | string | `"d"` | Key to dismiss the overlay (releases keyboard and input). |
 | `color_r` | string | `"r"` | Key to switch color to red. |
 | `color_g` | string | `"g"` | Key to switch color to green. |
 | `color_b` | string | `"b"` | Key to switch color to blue. |
 | `color_chooser` | string | `"c"` | Key to open the GTK color chooser dialog. |
+| `undo` | string | `"z"` | Key (with Ctrl) to undo the last drawn element. |
+| `clear_all` | string | `"x"` | Key (with Ctrl) to clear all drawn elements. |
 
 Keybind values are GTK key names (e.g. `"1"`, `"a"`, `"F1"`, `"space"`).
 
@@ -129,6 +139,8 @@ Place PNG images in `~/.config/chicolli/cursors/` to use custom cursors for each
 | `pencil.png` | Freehand drawing |
 | `arrow.png` | Arrow |
 | `rectangle.png` | Rectangle |
+| `text.png` | Text label |
+| `highlighter.png` | Highlighter |
 
 The images are scaled to 30×30 pixels. Default bundled cursors are included in the `cursors/` directory of the repository and can be copied to the config location.
 

@@ -58,6 +58,8 @@ fn activate(application: &gtk::Application) {
         drawing::drawing_tool::CurrentDrawingTool::NormalLine,
     ));
 
+    let text_input_mode = Rc::new(RefCell::new(false));
+
     let key_controller = gtk::EventControllerKey::new();
 
     let color_dialog = Rc::new(
@@ -71,6 +73,8 @@ fn activate(application: &gtk::Application) {
     let mut pencil_cur = gtk::gdk::Cursor::from_name("default", None);
     let mut arrow_cur = gtk::gdk::Cursor::from_name("default", None);
     let mut rectangle_cur = gtk::gdk::Cursor::from_name("default", None);
+    let mut text_cur = gtk::gdk::Cursor::from_name("text", None);
+    let mut highlighter_cur = gtk::gdk::Cursor::from_name("default", None);
 
     let cursors_loc = config::get_cursors_config_loc();
     if let Some(curs_loc) = cursors_loc {
@@ -102,6 +106,12 @@ fn activate(application: &gtk::Application) {
                                     config::SQUARE_CUR => {
                                         rectangle_cur = cur;
                                     }
+                                    config::TEXT_CUR => {
+                                        text_cur = cur;
+                                    }
+                                    config::HIGHLIGHTER_CUR => {
+                                        highlighter_cur = cur;
+                                    }
                                     _ => (),
                                 }
                             }
@@ -132,17 +142,86 @@ fn activate(application: &gtk::Application) {
         color,
         #[strong]
         current_tool,
-        move |_, keyval, _, _| {
+        #[strong]
+        text_input_mode,
+        #[strong]
+        elements,
+        move |_, keyval, _, modifier| {
+            if *text_input_mode.borrow() {
+                let _draw_key = Key::from_name(conf.draw_keybind.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
+                let _arrow_key = Key::from_name(conf.arrow_keybind.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
+                let _reverse_arrow_key = Key::from_name(conf.reverse_arrow_keybind.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
+                let _rectangle_key = Key::from_name(conf.rectangle_keybind.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
+                let _text_key = Key::from_name(conf.text_keybind.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
+                let _highlighter_key = Key::from_name(conf.highlighter_keybind.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
+
+                let is_tool_switch = keyval == _draw_key
+                    || keyval == _arrow_key
+                    || keyval == _reverse_arrow_key
+                    || keyval == _rectangle_key
+                    || keyval == _text_key
+                    || keyval == _highlighter_key;
+
+                if is_tool_switch || keyval == Key::Escape {
+                    if let Some(elem) = elements.borrow_mut().last_mut() {
+                        if let Some(text_tool) = elem.as_any_mut().downcast_mut::<drawing::text_label::TextLabel>() {
+                            text_tool.finish();
+                        }
+                    }
+                    *text_input_mode.borrow_mut() = false;
+                    draw.queue_draw();
+                    if keyval == Key::Escape {
+                        return Propagation::Stop;
+                    }
+                } else {
+                    match keyval {
+                        Key::Return => {
+                            if let Some(elem) = elements.borrow_mut().last_mut() {
+                                if let Some(text_tool) = elem.as_any_mut().downcast_mut::<drawing::text_label::TextLabel>() {
+                                    text_tool.finish();
+                                }
+                            }
+                            *text_input_mode.borrow_mut() = false;
+                        }
+                        Key::BackSpace => {
+                            if let Some(elem) = elements.borrow_mut().last_mut() {
+                                if let Some(text_tool) = elem.as_any_mut().downcast_mut::<drawing::text_label::TextLabel>() {
+                                    text_tool.pop_char();
+                                }
+                            }
+                            draw.queue_draw();
+                        }
+                        _ => {
+                            if let Some(c) = keyval.to_unicode() {
+                                if !c.is_control() {
+                                    if let Some(elem) = elements.borrow_mut().last_mut() {
+                                        if let Some(text_tool) = elem.as_any_mut().downcast_mut::<drawing::text_label::TextLabel>() {
+                                            text_tool.push_char(c);
+                                        }
+                                    }
+                                    draw.queue_draw();
+                                }
+                            }
+                        }
+                    }
+                    return Propagation::Stop;
+                }
+            }
+
             // close your eyes
             let _draw_key = Key::from_name(conf.draw_keybind.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
             let _arrow_key = Key::from_name(conf.arrow_keybind.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
             let _reverse_arrow_key = Key::from_name(conf.reverse_arrow_keybind.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
             let _rectangle_key = Key::from_name(conf.rectangle_keybind.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
+            let _text_key = Key::from_name(conf.text_keybind.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
+            let _highlighter_key = Key::from_name(conf.highlighter_keybind.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
             let _disable_drawing_key = Key::from_name(conf.disable_drawing.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
             let _color_r = Key::from_name(conf.color_r.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
             let _color_g = Key::from_name(conf.color_g.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
             let _color_b = Key::from_name(conf.color_b.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
             let _color_chooser = Key::from_name(conf.color_chooser.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
+            let _undo_key = Key::from_name(conf.undo.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
+            let _clear_all_key = Key::from_name(conf.clear_all.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
 
             match keyval {
                 // TOOLS
@@ -170,6 +249,18 @@ fn activate(application: &gtk::Application) {
                         draw.set_cursor(Some(&rectangle_cur));
                     }
                 },
+                _ if _text_key == keyval => {
+                    *current_tool.borrow_mut() = drawing::drawing_tool::CurrentDrawingTool::TextLabel;
+                    if let Some(text_cur) = text_cur.clone() {
+                        draw.set_cursor(Some(&text_cur));
+                    }
+                },
+                _ if _highlighter_key == keyval => {
+                    *current_tool.borrow_mut() = drawing::drawing_tool::CurrentDrawingTool::Highlighter;
+                    if let Some(highlighter_cur) = highlighter_cur.clone() {
+                        draw.set_cursor(Some(&highlighter_cur));
+                    }
+                },
                 _ if _disable_drawing_key == keyval => {
                     w.set_keyboard_mode(KeyboardMode::None);
                     if let Some(surface) = w.surface() {
@@ -182,6 +273,14 @@ fn activate(application: &gtk::Application) {
                 _ if _color_r == keyval =>  *color.borrow_mut() = colors::RED,
                 _ if _color_g == keyval =>  *color.borrow_mut() = colors::GREEN,
                 _ if _color_b == keyval =>  *color.borrow_mut() = colors::BLUE,
+                _ if _undo_key == keyval && modifier.contains(gtk::gdk::ModifierType::CONTROL_MASK) => {
+                    elements.borrow_mut().pop();
+                    draw.queue_draw();
+                },
+                _ if _clear_all_key == keyval && modifier.contains(gtk::gdk::ModifierType::CONTROL_MASK) => {
+                    elements.borrow_mut().clear();
+                    draw.queue_draw();
+                },
                 _ if _color_chooser == keyval => {
                     w.set_layer(Layer::Bottom);
                     color_dialog.choose_rgba(
@@ -262,12 +361,19 @@ fn activate(application: &gtk::Application) {
         current_tool,
         #[strong]
         line_width,
+        #[strong]
+        text_input_mode,
         move |_, _, x, y| {
             let mut drawing_tool: Box<dyn drawing::drawing_tool::DrawingTool> = match *current_tool.borrow() {
                 drawing::drawing_tool::CurrentDrawingTool::NormalLine => Box::new(drawing::normal_line::NormalLine::new()),
                 drawing::drawing_tool::CurrentDrawingTool::NormalArrowHeadBase => Box::new(drawing::arrow::NormalArrow::new(true)),
                 drawing::drawing_tool::CurrentDrawingTool::NormalArrowHeadPointer => Box::new(drawing::arrow::NormalArrow::new(false)),
                 drawing::drawing_tool::CurrentDrawingTool::NormalRectangle => Box::new(drawing::normal_rectangle::NormalRectangle::new()),
+                drawing::drawing_tool::CurrentDrawingTool::Highlighter => Box::new(drawing::highlighter::Highlighter::new()),
+                drawing::drawing_tool::CurrentDrawingTool::TextLabel => {
+                    *text_input_mode.borrow_mut() = true;
+                    Box::new(drawing::text_label::TextLabel::new())
+                },
             };
             drawing_tool.press_mouse(drawing::drawing_tool::Point(x, y));
             drawing_tool.set_line_width(*line_width.borrow());
@@ -295,6 +401,14 @@ fn activate(application: &gtk::Application) {
     scroll_controller.connect_scroll(glib::clone!(
         #[strong]
         line_width,
+        #[strong]
+        text_input_mode,
+        #[strong]
+        elements,
+        #[weak]
+        draw,
+        #[upgrade_or]
+        Propagation::Proceed,
         move |_, _, scroll| {
             let mut width = line_width.borrow_mut();
             let new_width = *width - scroll;
@@ -302,6 +416,12 @@ fn activate(application: &gtk::Application) {
                 *width = new_width;
             } else {
                 *width = 1.0;
+            }
+            if *text_input_mode.borrow() {
+                if let Some(elem) = elements.borrow_mut().last_mut() {
+                    elem.set_line_width(*width);
+                }
+                draw.queue_draw();
             }
             Propagation::Proceed
         },

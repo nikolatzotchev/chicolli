@@ -1,3 +1,5 @@
+use std::any::Any;
+
 use crate::colors::{self, Color};
 
 use super::drawing_tool::{DrawingTool, Point};
@@ -20,7 +22,7 @@ impl NormalArrow {
             end: None,
             arrow_length: 20.0,
             arrow_degree: 0.58067840828,
-            arrow_width: 2.0,
+            arrow_width: 5.0,
             finished: false,
             direction_head_base: direction,
             color: colors::RED,
@@ -115,5 +117,9 @@ impl DrawingTool for NormalArrow {
 
     fn active(&mut self) -> bool {
         return self.start.is_some() && !self.finished;
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }

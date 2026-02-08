@@ -13,43 +13,34 @@ pub struct Configuration {
     pub arrow_keybind: Option<String>,
     pub reverse_arrow_keybind: Option<String>,
     pub rectangle_keybind: Option<String>,
+    pub text_keybind: Option<String>,
+    pub highlighter_keybind: Option<String>,
     pub disable_drawing: Option<String>,
     pub color_r: Option<String>,
     pub color_g: Option<String>,
     pub color_b: Option<String>,
     pub color_chooser: Option<String>,
-}
-
-impl Configuration {
-    fn minimal() -> Self {
-        Configuration {
-            line_thickness: Some(2.0),
-            draw_keybind: None,
-            arrow_keybind: None,
-            reverse_arrow_keybind: None,
-            rectangle_keybind: None,
-            disable_drawing: None,
-            color_r: None,
-            color_g: None,
-            color_b: None,
-            color_chooser: None,
-        }
-    }
+    pub undo: Option<String>,
+    pub clear_all: Option<String>,
 }
 
 impl Default for Configuration {
     fn default() -> Self {
         Configuration {
-            line_thickness: Some(2.0),
+            line_thickness: Some(5.0),
             draw_keybind: Some(String::from("1")),
             arrow_keybind: Some(String::from("2")),
             reverse_arrow_keybind: Some(String::from("3")),
             rectangle_keybind: Some(String::from("4")),
+            text_keybind: Some(String::from("5")),
+            highlighter_keybind: Some(String::from("6")),
             disable_drawing: Some(String::from("d")),
             color_r: Some(String::from("r")),
             color_g: Some(String::from("g")),
             color_b: Some(String::from("b")),
             color_chooser: Some(String::from("c")),
+            undo: Some(String::from("z")),
+            clear_all: Some(String::from("x")),
         }
     }
 }
@@ -64,11 +55,17 @@ impl Configuration {
                 .reverse_arrow_keybind
                 .or(other_config.reverse_arrow_keybind),
             rectangle_keybind: self.rectangle_keybind.or(other_config.rectangle_keybind),
+            text_keybind: self.text_keybind.or(other_config.text_keybind),
+            highlighter_keybind: self
+                .highlighter_keybind
+                .or(other_config.highlighter_keybind),
             disable_drawing: self.disable_drawing.or(other_config.disable_drawing),
             color_r: self.color_r.or(other_config.color_r),
             color_g: self.color_g.or(other_config.color_g),
             color_b: self.color_b.or(other_config.color_b),
             color_chooser: self.color_chooser.or(other_config.color_chooser),
+            undo: self.undo.or(other_config.undo),
+            clear_all: self.clear_all.or(other_config.clear_all),
         }
     }
 }
@@ -76,6 +73,8 @@ impl Configuration {
 pub const PENCIL_CUR: &str = "pencil";
 pub const ARROW_CUR: &str = "arrow";
 pub const SQUARE_CUR: &str = "rectangle";
+pub const TEXT_CUR: &str = "text";
+pub const HIGHLIGHTER_CUR: &str = "highlighter";
 
 const CONFIG_NAME: &str = "chicolli.json";
 const CONFIG_DIR: &str = "chicolli";
@@ -153,5 +152,5 @@ fn read_config_file(file_path: &std::path::Path) -> Result<Configuration, Error>
     // Deserialize the JSON content into the Configuration struct
     let config = serde_json::from_str::<Configuration>(&content)?;
 
-    return Ok(config.merge(Configuration::minimal()));
+    return Ok(config.merge(Configuration::default()));
 }

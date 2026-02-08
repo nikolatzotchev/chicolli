@@ -1,3 +1,5 @@
+use std::any::Any;
+
 use gtk::cairo::Context;
 
 use crate::colors;
@@ -49,6 +51,8 @@ pub enum CurrentDrawingTool {
     NormalArrowHeadBase,
     NormalArrowHeadPointer,
     NormalRectangle,
+    Highlighter,
+    TextLabel,
 }
 
 pub trait DrawingTool {
@@ -59,4 +63,5 @@ pub trait DrawingTool {
     fn set_line_width(&mut self, width: f64);
     fn set_color(&mut self, color: colors::Color);
     fn active(&mut self) -> bool;
+    fn as_any_mut(&mut self) -> &mut dyn Any;
 }

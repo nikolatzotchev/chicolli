@@ -5,54 +5,31 @@ use gtk::cairo::Context;
 use crate::colors;
 
 use super::drawing_tool::{DrawingTool, Point};
+use super::normal_line::calc_whole_spline;
 
-pub struct NormalLine {
+pub struct Highlighter {
     points: Vec<Point>,
     finished: bool,
     started: bool,
     line_width: f64,
     color: colors::Color,
+    alpha: f64,
 }
 
-impl NormalLine {
-    pub fn new() -> NormalLine {
-        NormalLine {
+impl Highlighter {
+    pub fn new() -> Highlighter {
+        Highlighter {
             points: Vec::new(),
             finished: false,
             started: false,
-            line_width: 5.0,
+            line_width: 40.0,
             color: colors::RED,
+            alpha: 0.4,
         }
     }
 }
-// https://www.ibiblio.org/e-notes/Splines/b-int.html
-pub fn calc_whole_spline(points: &Vec<Point>) -> Vec<Point> {
-    let num_points = points.len();
-    // it does not work with less than 4 points, but this does not affect us since adding
-    // points happens fast
-    if num_points < 4 {
-        return vec![];
-    }
-    let mut a = vec![Point(0.0, 0.0); num_points];
-    let mut b = vec![0.0; num_points];
-    b[1] = -0.25;
-    let mut d = vec![Point(0.0, 0.0); num_points];
-    // maybe try to set these values better in the future
-    d[0] = (points[1] - points[0]) / 3.0;
-    d[num_points - 1] = (points[num_points - 1] - points[num_points - 2]) / 3.0;
 
-    a[1] = (points[2] - points[0] - d[0]) / 4.0;
-    for i in 2..num_points - 1 {
-        b[i] = -1.0 / (4.0 + b[i - 1]);
-        a[i] = -(points[i + 1] - points[i - 1] - a[i - 1]) * b[i];
-    }
-    for i in (1..num_points - 2).rev() {
-        d[i] = a[i] + d[i + 1] * b[i];
-    }
-    d
-}
-
-impl DrawingTool for NormalLine {
+impl DrawingTool for Highlighter {
     fn release_mouse(&mut self, _: Point) {
         self.finished = true;
     }
@@ -67,12 +44,13 @@ impl DrawingTool for NormalLine {
         }
     }
 
-    fn draw(&self, ctx: &Context) -> () {
+    fn draw(&self, ctx: &Context) {
         let color = self.color;
-        ctx.set_source_rgb(
+        ctx.set_source_rgba(
             color.red().into(),
             color.green().into(),
             color.blue().into(),
+            self.alpha,
         );
         ctx.set_line_width(self.line_width);
         ctx.set_line_cap(gtk::cairo::LineCap::Round);

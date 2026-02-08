@@ -1,3 +1,5 @@
+use std::any::Any;
+
 use crate::colors;
 
 use super::drawing_tool::{DrawingTool, Point};
@@ -16,7 +18,7 @@ impl NormalRectangle {
             start: None,
             end: None,
             finished: false,
-            line_width: 2.0,
+            line_width: 5.0,
             color: colors::RED,
         }
     }
@@ -74,5 +76,9 @@ impl DrawingTool for NormalRectangle {
 
     fn active(&mut self) -> bool {
         return self.start.is_some() && !self.finished;
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }
