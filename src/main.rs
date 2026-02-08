@@ -12,6 +12,7 @@ use std::{cell::RefCell, rc::Rc};
 
 pub mod colors;
 pub mod config;
+pub mod cursors;
 pub mod drawing;
 
 // https://github.com/wmww/gtk-layer-shell/blob/master/examples/simple-example.c
@@ -69,58 +70,12 @@ fn activate(application: &gtk::Application) {
             .build(),
     );
 
-    // get the tools cursors
-    let mut pencil_cur = gtk::gdk::Cursor::from_name("default", None);
-    let mut arrow_cur = gtk::gdk::Cursor::from_name("default", None);
-    let mut rectangle_cur = gtk::gdk::Cursor::from_name("default", None);
-    let mut text_cur = gtk::gdk::Cursor::from_name("text", None);
-    let mut highlighter_cur = gtk::gdk::Cursor::from_name("default", None);
-
-    let cursors_loc = config::get_cursors_config_loc();
-    if let Some(curs_loc) = cursors_loc {
-        if curs_loc.as_path().exists() {
-            let paths = std::fs::read_dir(curs_loc.as_path());
-            if let Ok(paths) = paths {
-                for path in paths {
-                    if let Ok(path) = path {
-                        if let Some(file_name) = path.path().file_stem() {
-                            if let Some(file_name) = file_name.to_str() {
-                                let pixbuf = gtk::gdk_pixbuf::Pixbuf::from_file_at_scale(
-                                    path.path(),
-                                    30,
-                                    30,
-                                    true,
-                                )
-                                .unwrap();
-                                let cur_texture = gtk::gdk::Texture::for_pixbuf(&pixbuf);
-                                let cur =
-                                    Some(gtk::gdk::Cursor::from_texture(&cur_texture, 0, 0, None));
-
-                                match file_name {
-                                    config::PENCIL_CUR => {
-                                        pencil_cur = cur;
-                                    }
-                                    config::ARROW_CUR => {
-                                        arrow_cur = cur;
-                                    }
-                                    config::SQUARE_CUR => {
-                                        rectangle_cur = cur;
-                                    }
-                                    config::TEXT_CUR => {
-                                        text_cur = cur;
-                                    }
-                                    config::HIGHLIGHTER_CUR => {
-                                        highlighter_cur = cur;
-                                    }
-                                    _ => (),
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
+    // generate tool cursors at runtime using Cairo
+    let pencil_cur = cursors::pencil_cursor();
+    let arrow_cur = cursors::arrow_cursor();
+    let rectangle_cur = cursors::rectangle_cursor();
+    let text_cur = cursors::text_cursor();
+    let highlighter_cur = cursors::highlighter_cursor();
 
     // Set up a widget
     let draw = gtk::DrawingArea::new();
