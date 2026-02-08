@@ -4,6 +4,7 @@ use gtk::glib::{self, Propagation};
 use gtk::{
     cairo::Region,
     gdk::{Display, Key},
+    gio,
     prelude::*,
 };
 use gtk4_layer_shell::{KeyboardMode, Layer, LayerShell};
@@ -48,6 +49,20 @@ fn activate(application: &gtk::Application) {
 
     for (anchor, state) in anchors {
         window.set_anchor(anchor, state);
+    }
+
+    {
+        let display = Display::default().expect("error getting default display");
+        let target_monitor = display
+            .default_seat()
+            .and_then(|s| s.pointer())
+            .and_then(|pointer| {
+                let surface = pointer.surface_at_position();
+                surface.0.and_then(|s| display.monitor_at_surface(&s))
+            });
+        if let Some(monitor) = target_monitor {
+            window.set_monitor(Some(&monitor));
+        }
     }
 
     // main components

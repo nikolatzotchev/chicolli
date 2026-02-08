@@ -82,16 +82,16 @@ impl DrawingTool for TextLabel {
                     color.green().into(),
                     color.blue().into(),
                 );
-                ctx.set_font_size(self.line_width * 8.0);
-                ctx.select_font_face(
-                    "Sans",
-                    gtk::cairo::FontSlant::Normal,
-                    gtk::cairo::FontWeight::Normal,
+
+                let layout = gtk::pango::Layout::new(&pangocairo::functions::create_context(ctx));
+                let font_desc = gtk::pango::FontDescription::from_string(
+                    &format!("Sans {}", (self.line_width * 8.0) as i32),
                 );
+                layout.set_font_description(Some(&font_desc));
+                layout.set_text(&self.text);
+
                 ctx.move_to(pos.0, pos.1);
-                if let Err(e) = ctx.show_text(&self.text) {
-                    println!("{e}")
-                }
+                pangocairo::functions::show_layout(ctx, &layout);
             }
         }
     }
