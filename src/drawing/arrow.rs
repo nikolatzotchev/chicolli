@@ -100,9 +100,8 @@ impl DrawingTool for NormalArrow {
 
             cnx.line_to(x2, y2);
 
-            match cnx.stroke() {
-                Err(e) => println!("{e}"),
-                _ => (),
+            if let Err(e) = cnx.stroke() {
+                println!("{e}")
             }
         }
     }
@@ -116,7 +115,7 @@ impl DrawingTool for NormalArrow {
     }
 
     fn active(&mut self) -> bool {
-        return self.start.is_some() && !self.finished;
+        self.start.is_some() && !self.finished
     }
 
     fn as_any_mut(&mut self) -> &mut dyn Any {

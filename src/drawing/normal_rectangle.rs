@@ -12,6 +12,12 @@ pub struct NormalRectangle {
     color: colors::Color,
 }
 
+impl Default for NormalRectangle {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NormalRectangle {
     pub fn new() -> NormalRectangle {
         NormalRectangle {
@@ -60,9 +66,8 @@ impl DrawingTool for NormalRectangle {
             );
         }
 
-        match cnx.stroke() {
-            Err(e) => println!("{e}"),
-            _ => (),
+        if let Err(e) = cnx.stroke() {
+            println!("{e}")
         }
     }
 
@@ -75,7 +80,7 @@ impl DrawingTool for NormalRectangle {
     }
 
     fn active(&mut self) -> bool {
-        return self.start.is_some() && !self.finished;
+        self.start.is_some() && !self.finished
     }
 
     fn as_any_mut(&mut self) -> &mut dyn Any {

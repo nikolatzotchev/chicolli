@@ -22,6 +22,12 @@ pub struct NormalLine {
     color: colors::Color,
 }
 
+impl Default for NormalLine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NormalLine {
     pub fn new() -> NormalLine {
         NormalLine {

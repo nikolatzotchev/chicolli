@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::{
     fs::File,
-    io::{Error, ErrorKind, Read},
+    io::{Error, Read},
 };
 
 use dirs::config_dir;
@@ -123,22 +123,19 @@ pub fn read_config() -> Result<Configuration, Error> {
                 if conf_path.as_path().exists() {
                     // parse the config and return
                     let config = read_config_file(conf_path.as_path())?;
-                    return Ok(config);
+                    Ok(config)
                 } else {
                     write_default_config(conf_path.as_path());
-                    return read_config();
+                    read_config()
                 }
             } else {
                 std::fs::create_dir_all(conf_path.as_path())?;
                 conf_path.push(CONFIG_NAME);
                 write_default_config(conf_path.as_path());
-                return read_config();
+                read_config()
             }
         }
-        None => Err(Error::new(
-            ErrorKind::Other,
-            "counld not find defaul config directory",
-        )),
+        None => Err(Error::other("counld not find defaul config directory")),
     }
 }
 
@@ -152,5 +149,5 @@ fn read_config_file(file_path: &std::path::Path) -> Result<Configuration, Error>
     // Deserialize the JSON content into the Configuration struct
     let config = serde_json::from_str::<Configuration>(&content)?;
 
-    return Ok(config.merge(Configuration::default()));
+    Ok(config.merge(Configuration::default()))
 }

@@ -14,6 +14,12 @@ pub struct TextLabel {
     color: colors::Color,
 }
 
+impl Default for TextLabel {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TextLabel {
     pub fn new() -> TextLabel {
         TextLabel {
@@ -83,9 +89,8 @@ impl DrawingTool for TextLabel {
                     gtk::cairo::FontWeight::Normal,
                 );
                 ctx.move_to(pos.0, pos.1);
-                match ctx.show_text(&self.text) {
-                    Err(e) => println!("{e}"),
-                    _ => (),
+                if let Err(e) = ctx.show_text(&self.text) {
+                    println!("{e}")
                 }
             }
         }
@@ -100,7 +105,7 @@ impl DrawingTool for TextLabel {
     }
 
     fn active(&mut self) -> bool {
-        return (self.placed && !self.finished) || self.movable;
+        (self.placed && !self.finished) || self.movable
     }
 
     fn as_any_mut(&mut self) -> &mut dyn Any {

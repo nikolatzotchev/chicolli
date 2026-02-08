@@ -92,6 +92,7 @@ pub fn pencil_cursor() -> Option<gdk::Cursor> {
     surface_to_cursor(&mut surface, PENCIL_TIP_X as i32, PENCIL_TIP_Y as i32)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn arrow_path(cr: &gtk::cairo::Context, x1: f64, y1: f64, x2: f64, y2: f64, head_len: f64, a1: f64, a2: f64) {
     cr.move_to(x1, y1);
     cr.line_to(x2, y2);

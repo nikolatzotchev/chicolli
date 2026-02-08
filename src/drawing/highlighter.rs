@@ -16,6 +16,12 @@ pub struct Highlighter {
     alpha: f64,
 }
 
+impl Default for Highlighter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Highlighter {
     pub fn new() -> Highlighter {
         Highlighter {
@@ -72,9 +78,8 @@ impl DrawingTool for Highlighter {
                     p_1.1,
                 )
             }
-            match ctx.stroke() {
-                Err(e) => panic!("{e}"),
-                _ => (),
+            if let Err(e) = ctx.stroke() {
+                panic!("{e}")
             }
         }
     }
@@ -88,7 +93,7 @@ impl DrawingTool for Highlighter {
     }
 
     fn active(&mut self) -> bool {
-        return self.started && !self.finished;
+        self.started && !self.finished
     }
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
