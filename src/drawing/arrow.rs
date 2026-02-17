@@ -2,7 +2,7 @@ use std::any::Any;
 
 use crate::colors::{self, Color};
 
-use super::drawing_tool::{DrawingTool, Point};
+use super::drawing_tool::{snap_angle, DrawingTool, Point};
 
 pub struct NormalArrow {
     start: Option<Point>,
@@ -13,6 +13,7 @@ pub struct NormalArrow {
     finished: bool,
     direction_head_base: bool,
     color: Color,
+    constrained: bool,
 }
 
 impl NormalArrow {
@@ -26,6 +27,7 @@ impl NormalArrow {
             finished: false,
             direction_head_base: direction,
             color: colors::RED,
+            constrained: false,
         }
     }
 }
@@ -47,7 +49,12 @@ impl DrawingTool for NormalArrow {
     }
 
     fn draw(&self, cnx: &gtk::cairo::Context) {
-        if let (Some(start), Some(end)) = (self.start, self.end) {
+        if let (Some(start), Some(raw_end)) = (self.start, self.end) {
+            let end = if self.constrained {
+                snap_angle(start, raw_end)
+            } else {
+                raw_end
+            };
             let color = self.color;
             cnx.set_source_rgb(
                 color.red().into(),
@@ -120,5 +127,9 @@ impl DrawingTool for NormalArrow {
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
+    }
+
+    fn set_constrained(&mut self, constrained: bool) {
+        self.constrained = constrained;
     }
 }

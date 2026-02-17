@@ -55,6 +55,22 @@ pub enum CurrentDrawingTool {
     TextLabel,
 }
 
+pub fn snap_angle(start: Point, end: Point) -> Point {
+    let dx = end.0 - start.0;
+    let dy = end.1 - start.1;
+    let angle = dy.atan2(dx);
+    let snapped = (angle / std::f64::consts::FRAC_PI_4).round() * std::f64::consts::FRAC_PI_4;
+    let len = (dx * dx + dy * dy).sqrt();
+    Point(start.0 + len * snapped.cos(), start.1 + len * snapped.sin())
+}
+
+pub fn snap_square(start: Point, end: Point) -> Point {
+    let dx = end.0 - start.0;
+    let dy = end.1 - start.1;
+    let side = dx.abs().max(dy.abs());
+    Point(start.0 + side * dx.signum(), start.1 + side * dy.signum())
+}
+
 pub trait DrawingTool {
     fn release_mouse(&mut self, point: Point);
     fn press_mouse(&mut self, point: Point);
@@ -64,4 +80,5 @@ pub trait DrawingTool {
     fn set_color(&mut self, color: colors::Color);
     fn active(&mut self) -> bool;
     fn as_any_mut(&mut self) -> &mut dyn Any;
+    fn set_constrained(&mut self, _constrained: bool) {}
 }

@@ -76,8 +76,10 @@ fn activate(application: &gtk::Application) {
     ));
 
     let text_input_mode = Rc::new(RefCell::new(false));
+    let shift_held = Rc::new(RefCell::new(false));
 
     let key_controller = gtk::EventControllerKey::new();
+    key_controller.set_propagation_phase(gtk::PropagationPhase::Capture);
 
     let color_dialog = Rc::new(
         gtk::ColorDialog::builder()
@@ -95,6 +97,7 @@ fn activate(application: &gtk::Application) {
 
     // Set up a widget
     let draw = gtk::DrawingArea::new();
+    draw.set_focusable(true);
     // the default cursor should be the pencil one
     if let Some(pencil_cur) = pencil_cur.clone() {
         draw.set_cursor(Some(&pencil_cur));
@@ -238,7 +241,15 @@ fn activate(application: &gtk::Application) {
         toolbar,
         #[strong]
         line_width,
+        #[strong]
+        shift_held,
         move |_, keyval, _, modifier| {
+            let is_shift = modifier.contains(gtk::gdk::ModifierType::SHIFT_MASK);
+            *shift_held.borrow_mut() = is_shift;
+            if let Some(elem) = elements.borrow_mut().last_mut() {
+                elem.set_constrained(is_shift);
+            }
+            draw.queue_draw();
             if *text_input_mode.borrow() {
                 let _draw_key = Key::from_name(conf.draw_keybind.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
                 let _arrow_key = Key::from_name(conf.arrow_keybind.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
@@ -410,6 +421,23 @@ fn activate(application: &gtk::Application) {
         },
     ));
 
+    key_controller.connect_key_released(glib::clone!(
+        #[strong]
+        shift_held,
+        #[strong]
+        elements,
+        #[weak]
+        draw,
+        move |_, _, _, modifier| {
+            let is_shift = modifier.contains(gtk::gdk::ModifierType::SHIFT_MASK);
+            *shift_held.borrow_mut() = is_shift;
+            if let Some(elem) = elements.borrow_mut().last_mut() {
+                elem.set_constrained(is_shift);
+            }
+            draw.queue_draw();
+        },
+    ));
+
     // key controller is added to the window and not to the drawarea because there it does not
     // work
     window.add_controller(key_controller);
@@ -485,6 +513,7 @@ fn activate(application: &gtk::Application) {
                 drawing::drawing_tool::CurrentDrawingTool::Highlighter => Box::new(drawing::highlighter::Highlighter::new()),
                 drawing::drawing_tool::CurrentDrawingTool::TextLabel => {
                     *text_input_mode.borrow_mut() = true;
+                    draw.grab_focus();
                     Box::new(drawing::text_label::TextLabel::new())
                 },
             };

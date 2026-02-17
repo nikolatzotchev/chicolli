@@ -2,7 +2,7 @@ use std::any::Any;
 
 use crate::colors;
 
-use super::drawing_tool::{DrawingTool, Point};
+use super::drawing_tool::{snap_square, DrawingTool, Point};
 
 pub struct NormalRectangle {
     start: Option<Point>,
@@ -10,6 +10,7 @@ pub struct NormalRectangle {
     finished: bool,
     line_width: f64,
     color: colors::Color,
+    constrained: bool,
 }
 
 impl Default for NormalRectangle {
@@ -26,6 +27,7 @@ impl NormalRectangle {
             finished: false,
             line_width: 5.0,
             color: colors::RED,
+            constrained: false,
         }
     }
 }
@@ -47,7 +49,12 @@ impl DrawingTool for NormalRectangle {
     }
 
     fn draw(&self, cnx: &gtk::cairo::Context) {
-        if let (Some(start), Some(end)) = (self.start, self.end) {
+        if let (Some(start), Some(raw_end)) = (self.start, self.end) {
+            let end = if self.constrained {
+                snap_square(start, raw_end)
+            } else {
+                raw_end
+            };
             let color = self.color;
             cnx.set_source_rgb(
                 color.red().into(),
@@ -85,5 +92,9 @@ impl DrawingTool for NormalRectangle {
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
+    }
+
+    fn set_constrained(&mut self, constrained: bool) {
+        self.constrained = constrained;
     }
 }
