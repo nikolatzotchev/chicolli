@@ -180,11 +180,8 @@ fn activate(application: &gtk::Application) {
                         Ok(c) => {
                             w.set_layer(Layer::Overlay);
                             *color.borrow_mut() = c;
-                            toolbar.borrow().update(
-                                &current_tool.borrow(),
-                                &c,
-                                *line_width.borrow(),
-                            );
+                            let tool = *current_tool.borrow();
+                            toolbar.borrow().update(&tool, &c, *line_width.borrow());
                         }
                         Err(_) => {
                             w.set_layer(Layer::Overlay);
@@ -206,9 +203,8 @@ fn activate(application: &gtk::Application) {
         line_width,
         move |rgba| {
             *color.borrow_mut() = rgba;
-            toolbar
-                .borrow()
-                .update(&current_tool.borrow(), &rgba, *line_width.borrow());
+            let tool = *current_tool.borrow();
+            toolbar.borrow().update(&tool, &rgba, *line_width.borrow());
         },
     ));
 
@@ -225,9 +221,9 @@ fn activate(application: &gtk::Application) {
             let mut width = line_width.borrow_mut();
             let new_width = *width + delta;
             *width = if new_width < 1.0 { 1.0 } else { new_width };
-            toolbar
-                .borrow()
-                .update(&current_tool.borrow(), &color.borrow(), *width);
+            let tool = *current_tool.borrow();
+            let col = *color.borrow();
+            toolbar.borrow().update(&tool, &col, *width);
         },
     ));
 
@@ -465,11 +461,8 @@ fn activate(application: &gtk::Application) {
                                 Ok(c) => {
                                     w.set_layer(Layer::Overlay);
                                     *color.borrow_mut() = c;
-                                    toolbar.borrow().update(
-                                        &current_tool.borrow(),
-                                        &c,
-                                        *line_width.borrow(),
-                                    );
+                                    let tool = *current_tool.borrow();
+                                    toolbar.borrow().update(&tool, &c, *line_width.borrow());
                                 }
                                 Err(_) => {
                                     w.set_layer(Layer::Overlay);
@@ -480,11 +473,10 @@ fn activate(application: &gtk::Application) {
                 }
                 _ => (),
             };
-            toolbar.borrow().update(
-                &current_tool.borrow(),
-                &color.borrow(),
-                *line_width.borrow(),
-            );
+            let tool = *current_tool.borrow();
+            let col = *color.borrow();
+            let lw = *line_width.borrow();
+            toolbar.borrow().update(&tool, &col, lw);
             Propagation::Proceed
         },
     ));
@@ -660,9 +652,9 @@ fn activate(application: &gtk::Application) {
                 }
                 draw.queue_draw();
             }
-            toolbar
-                .borrow()
-                .update(&current_tool.borrow(), &color.borrow(), *width);
+            let tool = *current_tool.borrow();
+            let col = *color.borrow();
+            toolbar.borrow().update(&tool, &col, *width);
             Propagation::Proceed
         },
     ));
