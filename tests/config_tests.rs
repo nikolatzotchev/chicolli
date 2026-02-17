@@ -1,4 +1,4 @@
-use gtk4_drawing_tool::config::Configuration;
+use chicolli::config::Configuration;
 
 #[test]
 fn merge_prefers_present_values_and_falls_back_to_defaults_source() {

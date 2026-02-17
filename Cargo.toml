@@ -1,5 +1,5 @@
 [package]
-name = "gtk4-drawing-tool"
+name = "chicolli"
 version = "0.1.0"
 edition = "2021"
 

@@ -57,19 +57,13 @@ cargo build --release
 After building, copy the binary to a directory in your `$PATH`:
 
 ```sh
-sudo cp target/release/gtk4-drawing-tool /usr/local/bin/chicolli
+sudo cp target/release/chicolli /usr/local/bin/chicolli
 ```
 
 Or install it directly with Cargo:
 
 ```sh
 cargo install --path .
-```
-
-This installs the binary as `gtk4-drawing-tool`. You can rename or symlink it:
-
-```sh
-ln -s ~/.cargo/bin/gtk4-drawing-tool ~/.cargo/bin/chicolli
 ```
 
 Optionally, copy the bundled cursors to the config directory:

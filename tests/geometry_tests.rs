@@ -1,4 +1,4 @@
-use gtk4_drawing_tool::geometry::{snap_angle, snap_square, Point};
+use chicolli::geometry::{snap_angle, snap_square, Point};
 
 const EPSILON: f64 = 1e-9;
 
