@@ -152,7 +152,6 @@ fn read_config_file(file_path: &std::path::Path) -> Result<Configuration, Error>
     Ok(config.merge(Configuration::default()))
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::Configuration;

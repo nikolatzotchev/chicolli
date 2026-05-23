@@ -4,7 +4,11 @@ use gtk::glib;
 const SIZE: i32 = 32;
 const OUTLINE: f64 = 2.5;
 
-fn surface_to_cursor(surface: &mut gtk::cairo::ImageSurface, hotspot_x: i32, hotspot_y: i32) -> Option<gdk::Cursor> {
+fn surface_to_cursor(
+    surface: &mut gtk::cairo::ImageSurface,
+    hotspot_x: i32,
+    hotspot_y: i32,
+) -> Option<gdk::Cursor> {
     surface.flush();
     let bytes = glib::Bytes::from(surface.data().ok()?.as_ref());
     let texture = gdk::MemoryTexture::new(
@@ -15,10 +19,7 @@ fn surface_to_cursor(surface: &mut gtk::cairo::ImageSurface, hotspot_x: i32, hot
         (SIZE * 4) as usize,
     );
     Some(gdk::Cursor::from_texture(
-        &texture,
-        hotspot_x,
-        hotspot_y,
-        None,
+        &texture, hotspot_x, hotspot_y, None,
     ))
 }
 
@@ -42,7 +43,8 @@ fn pencil_path(cr: &gtk::cairo::Context) {
 }
 
 pub fn pencil_cursor() -> Option<gdk::Cursor> {
-    let mut surface = gtk::cairo::ImageSurface::create(gtk::cairo::Format::ARgb32, SIZE, SIZE).ok()?;
+    let mut surface =
+        gtk::cairo::ImageSurface::create(gtk::cairo::Format::ARgb32, SIZE, SIZE).ok()?;
     {
         let cr = gtk::cairo::Context::new(&surface).ok()?;
         cr.set_antialias(gtk::cairo::Antialias::Best);
@@ -93,7 +95,16 @@ pub fn pencil_cursor() -> Option<gdk::Cursor> {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn arrow_path(cr: &gtk::cairo::Context, x1: f64, y1: f64, x2: f64, y2: f64, head_len: f64, a1: f64, a2: f64) {
+fn arrow_path(
+    cr: &gtk::cairo::Context,
+    x1: f64,
+    y1: f64,
+    x2: f64,
+    y2: f64,
+    head_len: f64,
+    a1: f64,
+    a2: f64,
+) {
     cr.move_to(x1, y1);
     cr.line_to(x2, y2);
     cr.move_to(x2, y2);
@@ -103,7 +114,8 @@ fn arrow_path(cr: &gtk::cairo::Context, x1: f64, y1: f64, x2: f64, y2: f64, head
 }
 
 pub fn arrow_cursor() -> Option<gdk::Cursor> {
-    let mut surface = gtk::cairo::ImageSurface::create(gtk::cairo::Format::ARgb32, SIZE, SIZE).ok()?;
+    let mut surface =
+        gtk::cairo::ImageSurface::create(gtk::cairo::Format::ARgb32, SIZE, SIZE).ok()?;
     {
         let cr = gtk::cairo::Context::new(&surface).ok()?;
         cr.set_antialias(gtk::cairo::Antialias::Best);
@@ -151,7 +163,8 @@ fn crosshair_path(cr: &gtk::cairo::Context) {
 }
 
 pub fn rectangle_cursor() -> Option<gdk::Cursor> {
-    let mut surface = gtk::cairo::ImageSurface::create(gtk::cairo::Format::ARgb32, SIZE, SIZE).ok()?;
+    let mut surface =
+        gtk::cairo::ImageSurface::create(gtk::cairo::Format::ARgb32, SIZE, SIZE).ok()?;
     {
         let cr = gtk::cairo::Context::new(&surface).ok()?;
         cr.set_antialias(gtk::cairo::Antialias::Best);
@@ -197,7 +210,8 @@ fn ibeam_path(cr: &gtk::cairo::Context) {
 }
 
 pub fn text_cursor() -> Option<gdk::Cursor> {
-    let mut surface = gtk::cairo::ImageSurface::create(gtk::cairo::Format::ARgb32, SIZE, SIZE).ok()?;
+    let mut surface =
+        gtk::cairo::ImageSurface::create(gtk::cairo::Format::ARgb32, SIZE, SIZE).ok()?;
     {
         let cr = gtk::cairo::Context::new(&surface).ok()?;
         cr.set_antialias(gtk::cairo::Antialias::Best);
@@ -247,7 +261,8 @@ fn highlighter_tip() -> (i32, i32) {
 }
 
 pub fn highlighter_cursor() -> Option<gdk::Cursor> {
-    let mut surface = gtk::cairo::ImageSurface::create(gtk::cairo::Format::ARgb32, SIZE, SIZE).ok()?;
+    let mut surface =
+        gtk::cairo::ImageSurface::create(gtk::cairo::Format::ARgb32, SIZE, SIZE).ok()?;
     {
         let cr = gtk::cairo::Context::new(&surface).ok()?;
         cr.set_antialias(gtk::cairo::Antialias::Best);

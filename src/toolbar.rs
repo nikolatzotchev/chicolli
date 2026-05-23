@@ -1,5 +1,5 @@
-use gtk::prelude::*;
 use gtk::glib;
+use gtk::prelude::*;
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -33,7 +33,12 @@ fn make_color_button(rgba: gtk::gdk::RGBA) -> gtk::Button {
     area.set_content_width(16);
     area.set_content_height(16);
     area.set_draw_func(move |_, ctx, w, h| {
-        ctx.set_source_rgba(rgba.red() as f64, rgba.green() as f64, rgba.blue() as f64, rgba.alpha() as f64);
+        ctx.set_source_rgba(
+            rgba.red() as f64,
+            rgba.green() as f64,
+            rgba.blue() as f64,
+            rgba.alpha() as f64,
+        );
         ctx.rectangle(0.0, 0.0, w as f64, h as f64);
         let _ = ctx.fill();
         ctx.set_source_rgb(1.0, 1.0, 1.0);
@@ -74,7 +79,10 @@ impl Toolbar {
                 btn.set_active(true);
             }
             container.append(&btn);
-            tool_buttons.push(ToolButton { button: btn, tool: *tool });
+            tool_buttons.push(ToolButton {
+                button: btn,
+                tool: *tool,
+            });
         }
 
         if let Some(first) = tool_buttons.first() {
@@ -98,7 +106,12 @@ impl Toolbar {
             swatch_color,
             move |_, ctx, width, height| {
                 let c = *swatch_color.borrow();
-                ctx.set_source_rgba(c.red() as f64, c.green() as f64, c.blue() as f64, c.alpha() as f64);
+                ctx.set_source_rgba(
+                    c.red() as f64,
+                    c.green() as f64,
+                    c.blue() as f64,
+                    c.alpha() as f64,
+                );
                 ctx.rectangle(0.0, 0.0, width as f64, height as f64);
                 let _ = ctx.fill();
 
@@ -176,7 +189,12 @@ impl Toolbar {
     }
 
     pub fn connect_swatch_clicked<F: Fn() + 'static>(&self, f: F) {
-        let swatch_btn = self.color_swatch.parent().unwrap().downcast::<gtk::Button>().unwrap();
+        let swatch_btn = self
+            .color_swatch
+            .parent()
+            .unwrap()
+            .downcast::<gtk::Button>()
+            .unwrap();
         swatch_btn.connect_clicked(move |_| f());
     }
 
@@ -184,9 +202,9 @@ impl Toolbar {
         let f = Rc::new(f);
         let presets = [colors::RED, colors::GREEN, colors::BLUE, colors::YELLOW];
 
-        let sep1_idx = self.tool_buttons.len(); // separator is at this index
-        // children order: [tool_buttons...] [sep1] [swatch_btn] [preset_btns...] [sep2] [thickness]
-        // preset buttons start at index: tool_buttons.len() + 1 (sep) + 1 (swatch) = len+2
+        // Children order: [tool_buttons...] [sep1] [swatch_btn] [preset_btns...] [sep2] [thickness]
+        // Preset buttons start at index: tool_buttons.len() + 1 (sep) + 1 (swatch) = len+2.
+        let sep1_idx = self.tool_buttons.len();
         let start = sep1_idx + 2;
 
         let container_child = self.container.first_child();
