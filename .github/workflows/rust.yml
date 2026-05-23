@@ -18,7 +18,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo dnf install -y \
-            rust cargo \
+            rust cargo rustfmt clippy \
             gtk4-layer-shell-devel
 
       - name: Cache Rust artifacts
