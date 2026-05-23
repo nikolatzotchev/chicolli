@@ -15,6 +15,7 @@ pub mod colors;
 pub mod config;
 pub mod cursors;
 pub mod drawing;
+pub mod geometry;
 pub mod toolbar;
 
 // https://github.com/wmww/gtk-layer-shell/blob/master/examples/simple-example.c
