@@ -388,7 +388,7 @@ fn activate(application: &gtk::Application) {
                     w.set_layer(Layer::Bottom);
                     color_dialog.choose_rgba(
                         None::<&gtk::Window>,
-                        Some(&gtk::gdk::RGBA::RED),
+                        Some(&*color.borrow()),
                         None::<&gio::Cancellable>,
                         glib::clone!(
                             #[strong]
