@@ -468,7 +468,7 @@ fn activate(application: &gtk::Application) {
     // Assign your handler to an event of the gesture (e.g. the `pressed` event)
     right_click_mouse.connect_pressed(|_, _, _, _| {
         // exit the application
-        std::process::exit(1);
+        std::process::exit(0);
     });
 
     draw.add_controller(right_click_mouse);
