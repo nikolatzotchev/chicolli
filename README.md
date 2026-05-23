@@ -33,6 +33,19 @@ sudo dnf install gtk4-devel gtk4-layer-shell-devel wayland-devel pkg-config
 sudo pacman -S gtk4 gtk4-layer-shell wayland pkg-config
 ```
 
+### Nix / NixOS
+
+```sh
+nix-shell --run "cargo build"
+```
+
+Or enter the shell first:
+
+```sh
+nix-shell
+cargo build
+```
+
 ## Building
 
 ```sh
