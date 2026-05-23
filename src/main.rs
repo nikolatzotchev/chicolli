@@ -247,7 +247,9 @@ fn activate(application: &gtk::Application) {
             let is_shift = modifier.contains(gtk::gdk::ModifierType::SHIFT_MASK);
             *shift_held.borrow_mut() = is_shift;
             if let Some(elem) = elements.borrow_mut().last_mut() {
-                elem.set_constrained(is_shift);
+                if elem.active() {
+                    elem.set_constrained(is_shift);
+                }
             }
             draw.queue_draw();
             if *text_input_mode.borrow() {
@@ -432,7 +434,9 @@ fn activate(application: &gtk::Application) {
             let is_shift = modifier.contains(gtk::gdk::ModifierType::SHIFT_MASK);
             *shift_held.borrow_mut() = is_shift;
             if let Some(elem) = elements.borrow_mut().last_mut() {
-                elem.set_constrained(is_shift);
+                if elem.active() {
+                    elem.set_constrained(is_shift);
+                }
             }
             draw.queue_draw();
         },
