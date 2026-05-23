@@ -66,7 +66,9 @@ pub fn calc_whole_spline(points: &[Point]) -> Vec<Point> {
 
 impl DrawingTool for NormalLine {
     fn release_mouse(&mut self, point: Point) {
-        if self.active() && (self.points.is_empty() || distance_sq(self.points.last().unwrap(), &point) > 0.0) {
+        if self.active()
+            && (self.points.is_empty() || distance_sq(self.points.last().unwrap(), &point) > 0.0)
+        {
             self.points.push(point);
         }
         self.finished = true;

@@ -84,9 +84,10 @@ impl DrawingTool for TextLabel {
                 );
 
                 let layout = gtk::pango::Layout::new(&pangocairo::functions::create_context(ctx));
-                let font_desc = gtk::pango::FontDescription::from_string(
-                    &format!("Sans {}", (self.line_width * 8.0) as i32),
-                );
+                let font_desc = gtk::pango::FontDescription::from_string(&format!(
+                    "Sans {}",
+                    (self.line_width * 8.0) as i32
+                ));
                 layout.set_font_description(Some(&font_desc));
                 layout.set_text(&self.text);
 

@@ -27,7 +27,10 @@ fn snap_angle_snaps_to_nearest_45_degree_angle() {
     let snapped = snap_angle(start, end);
 
     let expected_len = (2.0_f64.powi(2) + 1.0_f64.powi(2)).sqrt();
-    let expected = Point(expected_len * std::f64::consts::FRAC_1_SQRT_2, expected_len * std::f64::consts::FRAC_1_SQRT_2);
+    let expected = Point(
+        expected_len * std::f64::consts::FRAC_1_SQRT_2,
+        expected_len * std::f64::consts::FRAC_1_SQRT_2,
+    );
     assert_point_close(snapped, expected);
 }
 

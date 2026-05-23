@@ -1,61 +1,52 @@
-name: Rust
+name: Rust CI
 
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  # build:
-  #   runs-on: ubuntu-latest
-  #   container:
-  #     image: ghcr.io/gtk-rs/gtk4-rs/gtk4:latest
-  #   steps:
-  #   - uses: actions/checkout@v3
-  #   - name: Apt update
-  #     run: sudo apt update
-  #   - run: git clone https://github.com/wmww/gtk4-layer-shell
-  #   - run: sudo apt install meson libwayland-dev libgtk-4-dev gobject-introspection libgirepository1.0-dev gtk-doc-tools valac
-  #   - run: cd gtk4-layer-shell && meson setup -Dexamples=true -Ddocs=true -Dtests=true build && ninja -C build && sudo ninja -C build install && sudo ldconfig
-  #   - run: export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig
-  #   - run: export LD_LIBRARY_PATH=/usr/local/lib
-  #   - run: cd ..
-  #   - name: Build
-  #     run: cargo build --verbose
-  #   - name: Run tests
-  #     run: cargo test --verbose
+  fedora-ci:
+    name: Fedora checks
+    runs-on: ubuntu-latest
+    container: ghcr.io/gtk-rs/gtk4-rs/gtk4:latest
+    steps:
+      - uses: actions/checkout@v4
 
-  # apline-test:
-  #    runs-on: ubuntu-latest
-  #    container: alpine:edge
-  #    steps:
-  #    - uses: actions/checkout@v3
-  #    - run: apk --no-cache add git gcc g++ cmake binutils pkgconf meson ninja wayland-dev wayland-protocols libinput-dev libevdev-dev gtk4.0 gtk-doc vala rust cargo gdk-pixbuf
-  #    - run: apk add gtk4-layer-shell --update-cache --repository http://dl-cdn.alpinelinux.org/alpine/edge/testing/ --allow-untrusted
-  #    # - run: export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig
-  #    # - run: export LD_LIBRARY_PATH=/usr/local/lib
-  #    - name: Build
-  #      run: cargo build --verbose
-  #    - name: Run tests
-       # run: cargo test --verbose
-  fedora-test:
-     runs-on: ubuntu-latest
-     container: ghcr.io/gtk-rs/gtk4-rs/gtk4:latest
-     env:
-       PKG_CONFIG_PATH: /usr/local/lib/pkgconfig
-       LD_LIBRARY_PATH: /usr/local/lib
-     steps:
-     - uses: actions/checkout@v3
-     - run: git clone https://github.com/wmww/gtk4-layer-shell
-     - run: sudo dnf install vala gtk-doc -y
-     # - run: sudo apt install meson libwayland-dev libgtk-4-dev gobject-introspection libgirepository1.0-dev gtk-doc-tools valac
-     - run: cd gtk4-layer-shell && meson setup -Dexamples=true -Ddocs=true -Dtests=true build && ninja -C build && sudo ninja -C build install && sudo ldconfig
-     - run: sudo dnf install rust cargo -y
-     - name: Build
-       run: cargo build --verbose
-     - name: Check test targets compile
-       run: cargo check --tests --verbose
-     - name: Run tests
-       run: cargo test --verbose
-       #ghcr.io/gtk-rs/gtk4-rs/gtk4:latest
+      - name: Install system dependencies
+        run: |
+          sudo dnf install -y \
+            rust cargo rustfmt clippy \
+            gtk4-layer-shell-devel
 
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Format check
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Tests (locked)
+        run: cargo test --locked --verbose
+
+      - name: Release build (locked)
+        run: cargo build --release --locked --verbose
+
+  nix-ci:
+    name: Nix validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run tests in nix-shell
+        run: nix-shell --run "cargo test --locked"
