@@ -9,7 +9,7 @@ A GTK4 shell drawing tool for Wayland. Renders a transparent fullscreen overlay 
 - Rectangles
 - Text labels (click to place, type to annotate)
 - Highlighter (semi-transparent freehand drawing for highlighting)
-- Quick color switching (red, green, blue) and a color chooser dialog
+- Quick color switching (red, green, blue) and a color chooser popover
 - Adjustable line thickness via scroll wheel
 - Custom cursors per tool
 - Configurable keybindings
@@ -131,7 +131,7 @@ On first run, the config file is created automatically with default values. You 
 | `color_r` | string | `"r"` | Key to switch color to red. |
 | `color_g` | string | `"g"` | Key to switch color to green. |
 | `color_b` | string | `"b"` | Key to switch color to blue. |
-| `color_chooser` | string | `"c"` | Key to open the GTK color chooser dialog. |
+| `color_chooser` | string | `"c"` | Key to open the color chooser popover. |
 | `undo` | string | `"z"` | Key (with Ctrl) to undo the last drawn element. |
 | `clear_all` | string | `"x"` | Key (with Ctrl) to clear all drawn elements. |
 

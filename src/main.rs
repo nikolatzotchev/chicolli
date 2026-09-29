@@ -4,7 +4,6 @@ use gtk::glib::{self, Propagation};
 use gtk::{
     cairo::Region,
     gdk::{Display, Key},
-    gio,
     prelude::*,
 };
 use gtk4_layer_shell::{KeyboardMode, Layer, LayerShell};
@@ -82,13 +81,6 @@ fn activate(application: &gtk::Application) {
     let key_controller = gtk::EventControllerKey::new();
     key_controller.set_propagation_phase(gtk::PropagationPhase::Capture);
 
-    let color_dialog = Rc::new(
-        gtk::ColorDialog::builder()
-            .title("Choose color")
-            .modal(true)
-            .build(),
-    );
-
     // generate tool cursors at runtime using Cairo
     let pencil_cur = cursors::pencil_cursor();
     let arrow_cur = cursors::arrow_cursor();
@@ -147,10 +139,17 @@ fn activate(application: &gtk::Application) {
     ));
 
     toolbar.borrow().connect_swatch_clicked(glib::clone!(
-        #[strong(rename_to = w)]
-        window,
         #[strong]
-        color_dialog,
+        color,
+        #[strong]
+        toolbar,
+        move || {
+            let current = *color.borrow();
+            toolbar.borrow().open_color_chooser(&current);
+        },
+    ));
+
+    toolbar.borrow().connect_color_chosen(glib::clone!(
         #[strong]
         color,
         #[strong]
@@ -159,36 +158,10 @@ fn activate(application: &gtk::Application) {
         current_tool,
         #[strong]
         line_width,
-        move || {
-            w.set_layer(Layer::Bottom);
-            color_dialog.choose_rgba(
-                None::<&gtk::Window>,
-                Some(&*color.borrow()),
-                None::<&gio::Cancellable>,
-                glib::clone!(
-                    #[strong]
-                    color,
-                    #[strong]
-                    toolbar,
-                    #[strong]
-                    current_tool,
-                    #[strong]
-                    line_width,
-                    #[weak]
-                    w,
-                    move |c| match c {
-                        Ok(c) => {
-                            w.set_layer(Layer::Overlay);
-                            *color.borrow_mut() = c;
-                            let tool = *current_tool.borrow();
-                            toolbar.borrow().update(&tool, &c, *line_width.borrow());
-                        }
-                        Err(_) => {
-                            w.set_layer(Layer::Overlay);
-                        }
-                    },
-                ),
-            );
+        move |rgba| {
+            *color.borrow_mut() = rgba;
+            let tool = *current_tool.borrow();
+            toolbar.borrow().update(&tool, &rgba, *line_width.borrow());
         },
     ));
 
@@ -233,8 +206,6 @@ fn activate(application: &gtk::Application) {
         #[strong(rename_to = w)]
         window,
         #[strong]
-        color_dialog,
-        #[strong]
         conf,
         #[strong]
         color,
@@ -251,6 +222,10 @@ fn activate(application: &gtk::Application) {
         #[strong]
         shift_held,
         move |_, keyval, _, modifier| {
+            // Let the color chooser popover handle its own typing (hex entry, Escape).
+            if toolbar.borrow().color_chooser_open() {
+                return Propagation::Proceed;
+            }
             let is_shift = modifier.contains(gtk::gdk::ModifierType::SHIFT_MASK);
             *shift_held.borrow_mut() = is_shift;
             if let Some(elem) = elements.borrow_mut().last_mut() {
@@ -441,35 +416,8 @@ fn activate(application: &gtk::Application) {
                     draw.queue_draw();
                 }
                 _ if _color_chooser == keyval => {
-                    w.set_layer(Layer::Bottom);
-                    color_dialog.choose_rgba(
-                        None::<&gtk::Window>,
-                        Some(&*color.borrow()),
-                        None::<&gio::Cancellable>,
-                        glib::clone!(
-                            #[strong]
-                            color,
-                            #[strong]
-                            toolbar,
-                            #[strong]
-                            current_tool,
-                            #[strong]
-                            line_width,
-                            #[weak]
-                            w,
-                            move |c| match c {
-                                Ok(c) => {
-                                    w.set_layer(Layer::Overlay);
-                                    *color.borrow_mut() = c;
-                                    let tool = *current_tool.borrow();
-                                    toolbar.borrow().update(&tool, &c, *line_width.borrow());
-                                }
-                                Err(_) => {
-                                    w.set_layer(Layer::Overlay);
-                                }
-                            },
-                        ),
-                    );
+                    let current = *color.borrow();
+                    toolbar.borrow().open_color_chooser(&current);
                 }
                 _ => (),
             };
