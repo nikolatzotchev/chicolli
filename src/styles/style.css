@@ -59,6 +59,11 @@ tooltip {
    background: rgb(79, 145, 250);
 }
 
+.toolbar-danger-btn:hover {
+   background: rgba(239, 68, 68, 0.18);
+   color: rgb(252, 129, 129);
+}
+
 .toolbar-step-btn {
    padding: 2px 8px;
    font-size: 15px;

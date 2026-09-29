@@ -200,6 +200,34 @@ fn activate(application: &gtk::Application) {
         },
     ));
 
+    toolbar.borrow().connect_undo(glib::clone!(
+        #[strong]
+        elements,
+        #[strong]
+        text_input_mode,
+        #[weak]
+        draw,
+        move || {
+            *text_input_mode.borrow_mut() = false;
+            elements.borrow_mut().pop();
+            draw.queue_draw();
+        },
+    ));
+
+    toolbar.borrow().connect_clear(glib::clone!(
+        #[strong]
+        elements,
+        #[strong]
+        text_input_mode,
+        #[weak]
+        draw,
+        move || {
+            *text_input_mode.borrow_mut() = false;
+            elements.borrow_mut().clear();
+            draw.queue_draw();
+        },
+    ));
+
     key_controller.connect_key_pressed(glib::clone!(
         #[strong]
         draw,

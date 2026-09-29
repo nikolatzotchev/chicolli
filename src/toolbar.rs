@@ -21,6 +21,12 @@ const COLOR_PRESETS: [(gtk::gdk::RGBA, &str); 4] = [
     (colors::YELLOW, "Yellow"),
 ];
 
+#[derive(Clone, Copy)]
+enum ActionIcon {
+    Undo,
+    Clear,
+}
+
 struct ToolButton {
     button: gtk::ToggleButton,
     tool: CurrentDrawingTool,
@@ -46,6 +52,8 @@ pub struct Toolbar {
     swatch_color: Rc<RefCell<gtk::gdk::RGBA>>,
     width_preview: gtk::DrawingArea,
     preview_width: Rc<Cell<f64>>,
+    undo_btn: gtk::Button,
+    clear_btn: gtk::Button,
 }
 
 impl Default for Toolbar {
@@ -171,6 +179,66 @@ fn make_tool_button(tool: CurrentDrawingTool, tooltip: &str) -> gtk::ToggleButto
     btn
 }
 
+fn draw_action_icon(ctx: &cairo::Context, icon: ActionIcon, fg: &gtk::gdk::RGBA, s: f64) {
+    set_source(ctx, fg);
+    ctx.set_line_width(1.8);
+    ctx.set_line_cap(cairo::LineCap::Round);
+    ctx.set_line_join(cairo::LineJoin::Round);
+
+    match icon {
+        ActionIcon::Undo => {
+            // Counter-clockwise hook ending in an arrowhead on the left.
+            ctx.move_to(0.24 * s, 0.40 * s);
+            ctx.line_to(0.62 * s, 0.40 * s);
+            ctx.arc(0.62 * s, 0.58 * s, 0.18 * s, -PI / 2.0, PI / 2.0);
+            ctx.line_to(0.34 * s, 0.76 * s);
+            ctx.move_to(0.38 * s, 0.24 * s);
+            ctx.line_to(0.22 * s, 0.40 * s);
+            ctx.line_to(0.38 * s, 0.56 * s);
+            let _ = ctx.stroke();
+        }
+        ActionIcon::Clear => {
+            // Trash can: lid, handle, and a tapered bin with two ribs.
+            ctx.move_to(0.18 * s, 0.28 * s);
+            ctx.line_to(0.82 * s, 0.28 * s);
+            ctx.move_to(0.40 * s, 0.28 * s);
+            ctx.line_to(0.40 * s, 0.18 * s);
+            ctx.line_to(0.60 * s, 0.18 * s);
+            ctx.line_to(0.60 * s, 0.28 * s);
+            ctx.move_to(0.26 * s, 0.28 * s);
+            ctx.line_to(0.31 * s, 0.84 * s);
+            ctx.line_to(0.69 * s, 0.84 * s);
+            ctx.line_to(0.74 * s, 0.28 * s);
+            ctx.move_to(0.44 * s, 0.42 * s);
+            ctx.line_to(0.44 * s, 0.70 * s);
+            ctx.move_to(0.56 * s, 0.42 * s);
+            ctx.line_to(0.56 * s, 0.70 * s);
+            let _ = ctx.stroke();
+        }
+    }
+}
+
+fn make_action_button(icon: ActionIcon, tooltip: &str) -> gtk::Button {
+    let area = gtk::DrawingArea::new();
+    area.set_content_width(ICON_SIZE);
+    area.set_content_height(ICON_SIZE);
+    area.set_draw_func(move |area, ctx, w, h| {
+        draw_action_icon(ctx, icon, &area.color(), w.min(h) as f64);
+    });
+
+    let btn = gtk::Button::new();
+    btn.set_child(Some(&area));
+    btn.add_css_class("toolbar-tool-btn");
+    btn.set_tooltip_text(Some(tooltip));
+    // The icon color follows hover state (see style.css), so repaint on state changes.
+    btn.connect_state_flags_changed(glib::clone!(
+        #[weak]
+        area,
+        move |_, _| area.queue_draw()
+    ));
+    btn
+}
+
 fn make_color_button(rgba: gtk::gdk::RGBA) -> gtk::Button {
     let area = gtk::DrawingArea::new();
     area.set_content_width(PRESET_SIZE);
@@ -195,9 +263,8 @@ impl Toolbar {
     pub fn new() -> Self {
         let container = gtk::Box::new(gtk::Orientation::Horizontal, 6);
         container.add_css_class("toolbar-palette");
-        container.set_margin_start(12);
         container.set_margin_top(12);
-        container.set_halign(gtk::Align::Start);
+        container.set_halign(gtk::Align::Center);
         container.set_valign(gtk::Align::Start);
 
         // Tools
@@ -328,6 +395,15 @@ impl Toolbar {
         width_group.append(&plus_btn);
         container.append(&width_group);
 
+        // History
+        let action_group = make_group();
+        let undo_btn = make_action_button(ActionIcon::Undo, "Undo");
+        action_group.append(&undo_btn);
+        let clear_btn = make_action_button(ActionIcon::Clear, "Clear all");
+        clear_btn.add_css_class("toolbar-danger-btn");
+        action_group.append(&clear_btn);
+        container.append(&action_group);
+
         Toolbar {
             container,
             tool_buttons,
@@ -342,6 +418,8 @@ impl Toolbar {
             swatch_color,
             width_preview,
             preview_width,
+            undo_btn,
+            clear_btn,
         }
     }
 
@@ -398,6 +476,14 @@ impl Toolbar {
         self.plus_btn.connect_clicked(move |_| f_plus(1.0));
         let f_minus = f.clone();
         self.minus_btn.connect_clicked(move |_| f_minus(-1.0));
+    }
+
+    pub fn connect_undo<F: Fn() + 'static>(&self, f: F) {
+        self.undo_btn.connect_clicked(move |_| f());
+    }
+
+    pub fn connect_clear<F: Fn() + 'static>(&self, f: F) {
+        self.clear_btn.connect_clicked(move |_| f());
     }
 
     pub fn set_active_tool(&self, tool: CurrentDrawingTool) {
