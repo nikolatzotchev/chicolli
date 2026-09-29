@@ -34,7 +34,7 @@ src/
 ├── config.rs               # JSON config read/write from ~/.config/chicolli/chicolli.json
 ├── colors.rs               # Color type alias (gtk::gdk::RGBA) and preset constants
 ├── cursors.rs              # Runtime Cairo-generated GTK cursors
-├── toolbar.rs              # Overlay toolbar for tools, colors, and line width
+├── toolbar.rs              # Overlay toolbar for tools, colors, line width, undo/clear
 ├── drawing.rs              # Module re-exports for drawing tools
 ├── drawing/
 │   ├── drawing_tool.rs     # Point struct, DrawingTool trait, CurrentDrawingTool enum, snap helpers
@@ -55,7 +55,7 @@ shell.nix                # Nix development shell with native build dependencies
 - **State management**: Uses `Rc<RefCell<T>>` for shared mutable state across GTK closures.
 - **Config**: JSON config at `~/.config/chicolli/chicolli.json` with keybinds and line thickness. Auto-created with defaults if missing. Partial configs merge with `Configuration::default()`.
 - **Cursors**: Current GTK cursors are generated at runtime in `src/cursors.rs` using Cairo and `gdk::MemoryTexture`. The `cursors/` PNGs remain bundled assets/documentation examples, but the app path currently uses generated cursors.
-- **Toolbar**: `src/toolbar.rs` owns tool toggles, color presets/chooser swatch, and line-width buttons. Keep toolbar state synchronized with keyboard shortcuts and mouse-wheel changes via `Toolbar::update`.
+- **Toolbar**: `src/toolbar.rs` owns tool toggles, color presets/chooser swatch, line-width buttons, and undo/clear buttons. Keep toolbar state synchronized with keyboard shortcuts and mouse-wheel changes via `Toolbar::update`.
 - **Constrained drawing**: `DrawingTool::set_constrained` is used for Shift-modified snapping. `snap_angle` and `snap_square` live in `drawing_tool.rs`.
 - **Layer behavior**: The main window uses layer-shell overlay mode and exclusive keyboard mode. The color chooser is a popover on the toolbar swatch (a popup of the overlay, so tiling compositors never tile it); the key handler passes keys through while it is open.
 
