@@ -39,6 +39,9 @@ pub struct Toolbar {
     minus_btn: gtk::Button,
     plus_btn: gtk::Button,
     swatch_btn: gtk::Button,
+    color_popover: gtk::Popover,
+    #[allow(deprecated)]
+    color_chooser: gtk::ColorChooserWidget,
     color_swatch: gtk::DrawingArea,
     swatch_color: Rc<RefCell<gtk::gdk::RGBA>>,
     width_preview: gtk::DrawingArea,
@@ -252,6 +255,20 @@ impl Toolbar {
         swatch_btn.set_tooltip_text(Some("Current color (click to choose)"));
         color_group.append(&swatch_btn);
 
+        // The full chooser lives in a popover so it opens as a popup of the overlay
+        // instead of a separate toplevel that tiling compositors would tile.
+        #[allow(deprecated)]
+        let color_chooser = {
+            let chooser = gtk::ColorChooserWidget::new();
+            chooser.set_use_alpha(true);
+            chooser
+        };
+        let color_popover = gtk::Popover::new();
+        color_popover.add_css_class("toolbar-color-popover");
+        color_popover.set_child(Some(&color_chooser));
+        color_popover.set_position(gtk::PositionType::Bottom);
+        color_popover.set_parent(&swatch_btn);
+
         let sep = gtk::Separator::new(gtk::Orientation::Vertical);
         sep.add_css_class("toolbar-sep");
         color_group.append(&sep);
@@ -319,6 +336,8 @@ impl Toolbar {
             minus_btn,
             plus_btn,
             swatch_btn,
+            color_popover,
+            color_chooser,
             color_swatch,
             swatch_color,
             width_preview,
@@ -345,6 +364,23 @@ impl Toolbar {
 
     pub fn connect_swatch_clicked<F: Fn() + 'static>(&self, f: F) {
         self.swatch_btn.connect_clicked(move |_| f());
+    }
+
+    /// Called with each color picked in the color chooser popover.
+    pub fn connect_color_chosen<F: Fn(gtk::gdk::RGBA) + 'static>(&self, f: F) {
+        #[allow(deprecated)]
+        self.color_chooser
+            .connect_rgba_notify(move |chooser| f(chooser.rgba()));
+    }
+
+    pub fn open_color_chooser(&self, current: &gtk::gdk::RGBA) {
+        #[allow(deprecated)]
+        self.color_chooser.set_rgba(current);
+        self.color_popover.popup();
+    }
+
+    pub fn color_chooser_open(&self) -> bool {
+        self.color_popover.is_visible()
     }
 
     pub fn connect_preset_selected<F: Fn(gtk::gdk::RGBA) + 'static>(&self, f: F) {
