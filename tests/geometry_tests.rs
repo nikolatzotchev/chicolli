@@ -1,4 +1,6 @@
-use chicolli::geometry::{snap_angle, snap_square, Point};
+use chicolli::geometry::{
+    arrow_head, distance_sq, snap_angle, snap_square, spline_controls, Point,
+};
 
 const EPSILON: f64 = 1e-9;
 
@@ -42,4 +44,62 @@ fn snap_square_makes_square_in_negative_direction() {
     let snapped = snap_square(start, end);
 
     assert_point_close(snapped, Point(2.0, 2.0));
+}
+
+#[test]
+fn spline_controls_solve_every_inner_equation() {
+    let points = [
+        Point(0.0, 0.0),
+        Point(10.0, 5.0),
+        Point(20.0, -3.0),
+        Point(30.0, 8.0),
+        Point(40.0, 0.0),
+        Point(55.0, 12.0),
+    ];
+    let d = spline_controls(&points);
+    assert_eq!(d.len(), points.len());
+    // Every inner point, including the one next to the end, must satisfy
+    // d[i - 1] + 4 d[i] + d[i + 1] = p[i + 1] - p[i - 1].
+    for i in 1..points.len() - 1 {
+        let lhs = d[i - 1] + d[i] * 4.0 + d[i + 1];
+        let rhs = points[i + 1] - points[i - 1];
+        assert!(distance_sq(lhs, rhs) < 1e-12, "row {i}: {lhs:?} != {rhs:?}");
+    }
+}
+
+#[test]
+fn spline_through_collinear_points_is_straight() {
+    let points: Vec<Point> = (0..5).map(|i| Point(f64::from(i) * 10.0, 0.0)).collect();
+    for c in spline_controls(&points) {
+        assert!((c.0 - 10.0 / 3.0).abs() < EPSILON);
+        assert!(c.1.abs() < EPSILON);
+    }
+}
+
+#[test]
+fn spline_controls_need_three_points() {
+    assert!(spline_controls(&[Point(0.0, 0.0), Point(1.0, 1.0)]).is_empty());
+    assert_eq!(
+        spline_controls(&[Point(0.0, 0.0), Point(1.0, 1.0), Point(2.0, 0.0)]).len(),
+        3
+    );
+}
+
+#[test]
+fn arrow_head_wings_trail_behind_the_tip() {
+    let (w1, w2) = arrow_head(
+        Point(0.0, 0.0),
+        Point(100.0, 0.0),
+        20.0,
+        std::f64::consts::FRAC_PI_4,
+    )
+    .expect("arrow has a direction");
+    let back = 20.0 * std::f64::consts::FRAC_1_SQRT_2;
+    assert_point_close(w1, Point(100.0 - back, back));
+    assert_point_close(w2, Point(100.0 - back, -back));
+}
+
+#[test]
+fn arrow_head_without_direction_is_none() {
+    assert!(arrow_head(Point(3.0, 3.0), Point(3.0, 3.0), 20.0, 0.5).is_none());
 }

@@ -8,7 +8,7 @@ A GTK4 shell drawing tool for Wayland. Renders a transparent fullscreen overlay 
 - Arrows (with reversible direction)
 - Rectangles
 - Text labels (click to place, type to annotate)
-- Highlighter (semi-transparent freehand drawing for highlighting)
+- Highlighter (semi-transparent freehand drawing in the selected color, four times the line width)
 - Quick color switching (red, green, blue) and a color chooser popover
 - Adjustable line thickness via scroll wheel
 - Custom cursors per tool
@@ -126,7 +126,7 @@ On first run, the config file is created automatically with default values. You 
 | `reverse_arrow_keybind` | string | `"3"` | Key to switch to the reverse arrow tool (arrowhead at start). |
 | `rectangle_keybind` | string | `"4"` | Key to switch to the rectangle tool. |
 | `text_keybind` | string | `"5"` | Key to switch to the text label tool. Click to place, type to enter text, press Enter or Escape to finish. |
-| `highlighter_keybind` | string | `"6"` | Key to switch to the highlighter tool. Draws semi-transparent strokes for highlighting. |
+| `highlighter_keybind` | string | `"6"` | Key to switch to the highlighter tool. Draws semi-transparent strokes in the selected color, four times as wide as the line thickness. |
 | `disable_drawing` | string | `"d"` | Key to dismiss the overlay (releases keyboard and input). |
 | `color_r` | string | `"r"` | Key to switch color to red. |
 | `color_g` | string | `"g"` | Key to switch color to green. |
