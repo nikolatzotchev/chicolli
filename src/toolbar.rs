@@ -1,25 +1,48 @@
+use gtk::cairo;
 use gtk::glib;
 use gtk::prelude::*;
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
+use std::f64::consts::PI;
 use std::rc::Rc;
 
 use crate::colors;
 use crate::drawing::drawing_tool::CurrentDrawingTool;
+
+const ICON_SIZE: i32 = 18;
+const PRESET_SIZE: i32 = 18;
+const SWATCH_SIZE: i32 = 24;
+const WIDTH_PREVIEW_SIZE: i32 = 22;
+
+const COLOR_PRESETS: [(gtk::gdk::RGBA, &str); 4] = [
+    (colors::RED, "Red"),
+    (colors::GREEN, "Green"),
+    (colors::BLUE, "Blue"),
+    (colors::YELLOW, "Yellow"),
+];
 
 struct ToolButton {
     button: gtk::ToggleButton,
     tool: CurrentDrawingTool,
 }
 
+struct PresetButton {
+    button: gtk::Button,
+    color: gtk::gdk::RGBA,
+}
+
 pub struct Toolbar {
     container: gtk::Box,
     tool_buttons: Vec<ToolButton>,
+    preset_buttons: Vec<PresetButton>,
     thickness_label: gtk::Label,
     minus_btn: gtk::Button,
     plus_btn: gtk::Button,
+    swatch_btn: gtk::Button,
     color_swatch: gtk::DrawingArea,
     swatch_color: Rc<RefCell<gtk::gdk::RGBA>>,
+    width_preview: gtk::DrawingArea,
+    preview_width: Rc<Cell<f64>>,
 }
 
 impl Default for Toolbar {
@@ -28,23 +51,129 @@ impl Default for Toolbar {
     }
 }
 
+fn set_source(ctx: &cairo::Context, c: &gtk::gdk::RGBA) {
+    ctx.set_source_rgba(
+        c.red() as f64,
+        c.green() as f64,
+        c.blue() as f64,
+        c.alpha() as f64,
+    );
+}
+
+fn same_color(a: &gtk::gdk::RGBA, b: &gtk::gdk::RGBA) -> bool {
+    let eq = |x: f32, y: f32| (x - y).abs() < 0.002;
+    eq(a.red(), b.red()) && eq(a.green(), b.green()) && eq(a.blue(), b.blue())
+}
+
+/// Filled circle with a thin light outline so dark colors stay visible on the dark toolbar.
+fn draw_color_dot(ctx: &cairo::Context, c: &gtk::gdk::RGBA, w: f64, h: f64) {
+    let r = w.min(h) / 2.0 - 1.0;
+    ctx.arc(w / 2.0, h / 2.0, r, 0.0, 2.0 * PI);
+    set_source(ctx, c);
+    let _ = ctx.fill_preserve();
+    ctx.set_source_rgba(1.0, 1.0, 1.0, 0.35);
+    ctx.set_line_width(1.0);
+    let _ = ctx.stroke();
+}
+
+fn draw_arrow_icon(ctx: &cairo::Context, s: f64, pointing_right: bool) {
+    let (tail, head) = if pointing_right {
+        (0.18 * s, 0.82 * s)
+    } else {
+        (0.82 * s, 0.18 * s)
+    };
+    let dir = if pointing_right { -1.0 } else { 1.0 };
+    let y = 0.5 * s;
+    ctx.move_to(tail, y);
+    ctx.line_to(head, y);
+    ctx.move_to(head + dir * 0.28 * s, y - 0.24 * s);
+    ctx.line_to(head, y);
+    ctx.line_to(head + dir * 0.28 * s, y + 0.24 * s);
+    let _ = ctx.stroke();
+}
+
+/// Draws a monochrome icon for `tool` in the widget's current foreground color.
+fn draw_tool_icon(ctx: &cairo::Context, tool: CurrentDrawingTool, fg: &gtk::gdk::RGBA, s: f64) {
+    set_source(ctx, fg);
+    ctx.set_line_width(1.8);
+    ctx.set_line_cap(cairo::LineCap::Round);
+    ctx.set_line_join(cairo::LineJoin::Round);
+
+    match tool {
+        CurrentDrawingTool::NormalLine => {
+            // A freehand squiggle.
+            ctx.move_to(0.14 * s, 0.72 * s);
+            ctx.curve_to(0.30 * s, 0.20 * s, 0.46 * s, 0.20 * s, 0.52 * s, 0.50 * s);
+            ctx.curve_to(0.58 * s, 0.80 * s, 0.74 * s, 0.80 * s, 0.86 * s, 0.28 * s);
+            let _ = ctx.stroke();
+        }
+        CurrentDrawingTool::NormalArrowHeadPointer => draw_arrow_icon(ctx, s, true),
+        CurrentDrawingTool::NormalArrowHeadBase => draw_arrow_icon(ctx, s, false),
+        CurrentDrawingTool::NormalRectangle => {
+            ctx.rectangle(0.16 * s, 0.26 * s, 0.68 * s, 0.48 * s);
+            let _ = ctx.stroke();
+        }
+        CurrentDrawingTool::Highlighter => {
+            // A translucent marker band with a tilted marker above it.
+            ctx.set_source_rgba(
+                fg.red() as f64,
+                fg.green() as f64,
+                fg.blue() as f64,
+                fg.alpha() as f64 * 0.5,
+            );
+            ctx.rectangle(0.10 * s, 0.76 * s, 0.80 * s, 0.14 * s);
+            let _ = ctx.fill();
+
+            set_source(ctx, fg);
+            ctx.save().ok();
+            ctx.translate(0.56 * s, 0.40 * s);
+            ctx.rotate(-PI / 4.0);
+            // Body.
+            ctx.rectangle(-0.10 * s, -0.12 * s, 0.44 * s, 0.24 * s);
+            // Chisel tip.
+            ctx.move_to(-0.10 * s, -0.12 * s);
+            ctx.line_to(-0.26 * s, -0.06 * s);
+            ctx.line_to(-0.26 * s, 0.06 * s);
+            ctx.line_to(-0.10 * s, 0.12 * s);
+            ctx.restore().ok();
+            ctx.set_line_width(1.5);
+            let _ = ctx.stroke();
+        }
+        CurrentDrawingTool::TextLabel => {
+            ctx.move_to(0.20 * s, 0.22 * s);
+            ctx.line_to(0.80 * s, 0.22 * s);
+            ctx.move_to(0.50 * s, 0.22 * s);
+            ctx.line_to(0.50 * s, 0.82 * s);
+            ctx.move_to(0.38 * s, 0.82 * s);
+            ctx.line_to(0.62 * s, 0.82 * s);
+            let _ = ctx.stroke();
+        }
+    }
+}
+
+fn make_tool_button(tool: CurrentDrawingTool, tooltip: &str) -> gtk::ToggleButton {
+    let icon = gtk::DrawingArea::new();
+    icon.set_content_width(ICON_SIZE);
+    icon.set_content_height(ICON_SIZE);
+    icon.set_draw_func(move |area, ctx, w, h| {
+        draw_tool_icon(ctx, tool, &area.color(), w.min(h) as f64);
+    });
+
+    let btn = gtk::ToggleButton::new();
+    btn.set_child(Some(&icon));
+    btn.add_css_class("toolbar-tool-btn");
+    btn.set_tooltip_text(Some(tooltip));
+    // The icon color follows the button state (see style.css), so repaint on toggle.
+    btn.connect_toggled(move |_| icon.queue_draw());
+    btn
+}
+
 fn make_color_button(rgba: gtk::gdk::RGBA) -> gtk::Button {
     let area = gtk::DrawingArea::new();
-    area.set_content_width(16);
-    area.set_content_height(16);
+    area.set_content_width(PRESET_SIZE);
+    area.set_content_height(PRESET_SIZE);
     area.set_draw_func(move |_, ctx, w, h| {
-        ctx.set_source_rgba(
-            rgba.red() as f64,
-            rgba.green() as f64,
-            rgba.blue() as f64,
-            rgba.alpha() as f64,
-        );
-        ctx.rectangle(0.0, 0.0, w as f64, h as f64);
-        let _ = ctx.fill();
-        ctx.set_source_rgb(1.0, 1.0, 1.0);
-        ctx.set_line_width(1.0);
-        ctx.rectangle(0.5, 0.5, w as f64 - 1.0, h as f64 - 1.0);
-        let _ = ctx.stroke();
+        draw_color_dot(ctx, &rgba, w as f64, h as f64);
     });
     let btn = gtk::Button::new();
     btn.set_child(Some(&area));
@@ -52,122 +181,148 @@ fn make_color_button(rgba: gtk::gdk::RGBA) -> gtk::Button {
     btn
 }
 
+fn make_group() -> gtk::Box {
+    let group = gtk::Box::new(gtk::Orientation::Horizontal, 2);
+    group.add_css_class("toolbar-group");
+    group.set_valign(gtk::Align::Center);
+    group
+}
+
 impl Toolbar {
     pub fn new() -> Self {
-        let container = gtk::Box::new(gtk::Orientation::Horizontal, 4);
+        let container = gtk::Box::new(gtk::Orientation::Horizontal, 6);
         container.add_css_class("toolbar-palette");
         container.set_margin_start(12);
         container.set_margin_top(12);
         container.set_halign(gtk::Align::Start);
         container.set_valign(gtk::Align::Start);
 
+        // Tools
         let tools = [
             (CurrentDrawingTool::NormalLine, "Pen"),
-            (CurrentDrawingTool::NormalArrowHeadPointer, "→"),
-            (CurrentDrawingTool::NormalArrowHeadBase, "←"),
-            (CurrentDrawingTool::NormalRectangle, "▭"),
-            (CurrentDrawingTool::Highlighter, "HL"),
-            (CurrentDrawingTool::TextLabel, "T"),
+            (CurrentDrawingTool::NormalArrowHeadPointer, "Arrow"),
+            (CurrentDrawingTool::NormalArrowHeadBase, "Reverse arrow"),
+            (CurrentDrawingTool::NormalRectangle, "Rectangle"),
+            (CurrentDrawingTool::Highlighter, "Highlighter"),
+            (CurrentDrawingTool::TextLabel, "Text"),
         ];
 
-        let mut tool_buttons = Vec::new();
-
-        for (i, (tool, label)) in tools.iter().enumerate() {
-            let btn = gtk::ToggleButton::with_label(label);
-            btn.add_css_class("toolbar-tool-btn");
-            if i == 0 {
+        let tool_group = make_group();
+        let mut tool_buttons: Vec<ToolButton> = Vec::new();
+        for (tool, tooltip) in tools {
+            let btn = make_tool_button(tool, tooltip);
+            if let Some(first) = tool_buttons.first() {
+                btn.set_group(Some(&first.button));
+            } else {
                 btn.set_active(true);
             }
-            container.append(&btn);
-            tool_buttons.push(ToolButton {
-                button: btn,
-                tool: *tool,
-            });
+            tool_group.append(&btn);
+            tool_buttons.push(ToolButton { button: btn, tool });
         }
+        container.append(&tool_group);
 
-        if let Some(first) = tool_buttons.first() {
-            for tb in tool_buttons.iter().skip(1) {
-                tb.button.set_group(Some(&first.button));
-            }
-        }
+        // Colors
+        let color_group = make_group();
 
-        let sep1 = gtk::Separator::new(gtk::Orientation::Vertical);
-        sep1.add_css_class("toolbar-sep");
-        container.append(&sep1);
-
-        let swatch_color = Rc::new(RefCell::new(gtk::gdk::RGBA::RED));
+        let swatch_color = Rc::new(RefCell::new(colors::RED));
         let color_swatch = gtk::DrawingArea::new();
-        color_swatch.set_content_width(20);
-        color_swatch.set_content_height(20);
+        color_swatch.set_content_width(SWATCH_SIZE);
+        color_swatch.set_content_height(SWATCH_SIZE);
         color_swatch.add_css_class("toolbar-swatch");
-
         color_swatch.set_draw_func(glib::clone!(
             #[strong]
             swatch_color,
-            move |_, ctx, width, height| {
-                let c = *swatch_color.borrow();
-                ctx.set_source_rgba(
-                    c.red() as f64,
-                    c.green() as f64,
-                    c.blue() as f64,
-                    c.alpha() as f64,
-                );
-                ctx.rectangle(0.0, 0.0, width as f64, height as f64);
-                let _ = ctx.fill();
-
-                ctx.set_source_rgb(1.0, 1.0, 1.0);
-                ctx.set_line_width(1.0);
-                ctx.rectangle(0.5, 0.5, width as f64 - 1.0, height as f64 - 1.0);
+            move |_, ctx, w, h| {
+                let (w, h) = (w as f64, h as f64);
+                // Outer ring hints that this opens the full color chooser.
+                ctx.arc(w / 2.0, h / 2.0, w.min(h) / 2.0 - 1.0, 0.0, 2.0 * PI);
+                ctx.set_source_rgba(1.0, 1.0, 1.0, 0.85);
+                ctx.set_line_width(2.0);
                 let _ = ctx.stroke();
+                ctx.arc(w / 2.0, h / 2.0, w.min(h) / 2.0 - 4.0, 0.0, 2.0 * PI);
+                set_source(ctx, &swatch_color.borrow());
+                let _ = ctx.fill();
             },
         ));
 
         let swatch_btn = gtk::Button::new();
         swatch_btn.set_child(Some(&color_swatch));
         swatch_btn.add_css_class("toolbar-color-btn");
-        swatch_btn.set_tooltip_text(Some("Color chooser"));
-        container.append(&swatch_btn);
+        swatch_btn.add_css_class("toolbar-swatch-btn");
+        swatch_btn.set_tooltip_text(Some("Current color (click to choose)"));
+        color_group.append(&swatch_btn);
 
-        let color_presets = [
-            (colors::RED, "Red"),
-            (colors::GREEN, "Green"),
-            (colors::BLUE, "Blue"),
-            (colors::YELLOW, "Yellow"),
-        ];
+        let sep = gtk::Separator::new(gtk::Orientation::Vertical);
+        sep.add_css_class("toolbar-sep");
+        color_group.append(&sep);
 
-        for (rgba, tooltip) in &color_presets {
-            let btn = make_color_button(*rgba);
+        let mut preset_buttons = Vec::new();
+        for (rgba, tooltip) in COLOR_PRESETS {
+            let btn = make_color_button(rgba);
             btn.set_tooltip_text(Some(tooltip));
-            container.append(&btn);
+            color_group.append(&btn);
+            preset_buttons.push(PresetButton {
+                button: btn,
+                color: rgba,
+            });
         }
+        container.append(&color_group);
 
-        let sep2 = gtk::Separator::new(gtk::Orientation::Vertical);
-        sep2.add_css_class("toolbar-sep");
-        container.append(&sep2);
+        // Line width
+        let width_group = make_group();
 
         let minus_btn = gtk::Button::with_label("−");
         minus_btn.add_css_class("toolbar-tool-btn");
+        minus_btn.add_css_class("toolbar-step-btn");
         minus_btn.set_tooltip_text(Some("Decrease line width"));
-        container.append(&minus_btn);
+        width_group.append(&minus_btn);
+
+        let preview_width = Rc::new(Cell::new(5.0_f64));
+        let width_preview = gtk::DrawingArea::new();
+        width_preview.set_content_width(WIDTH_PREVIEW_SIZE);
+        width_preview.set_content_height(WIDTH_PREVIEW_SIZE);
+        width_preview.set_valign(gtk::Align::Center);
+        width_preview.set_draw_func(glib::clone!(
+            #[strong]
+            preview_width,
+            #[strong]
+            swatch_color,
+            move |_, ctx, w, h| {
+                let (w, h) = (w as f64, h as f64);
+                let r = (preview_width.get() / 2.0).clamp(1.0, w.min(h) / 2.0);
+                ctx.arc(w / 2.0, h / 2.0, r, 0.0, 2.0 * PI);
+                set_source(ctx, &swatch_color.borrow());
+                let _ = ctx.fill();
+            },
+        ));
+        width_group.append(&width_preview);
 
         let thickness_label = gtk::Label::new(Some("5"));
         thickness_label.add_css_class("toolbar-label");
         thickness_label.set_width_chars(2);
-        container.append(&thickness_label);
+        thickness_label.set_xalign(0.5);
+        thickness_label.set_tooltip_text(Some("Line width"));
+        width_group.append(&thickness_label);
 
         let plus_btn = gtk::Button::with_label("+");
         plus_btn.add_css_class("toolbar-tool-btn");
+        plus_btn.add_css_class("toolbar-step-btn");
         plus_btn.set_tooltip_text(Some("Increase line width"));
-        container.append(&plus_btn);
+        width_group.append(&plus_btn);
+        container.append(&width_group);
 
         Toolbar {
             container,
             tool_buttons,
+            preset_buttons,
             thickness_label,
             minus_btn,
             plus_btn,
+            swatch_btn,
             color_swatch,
             swatch_color,
+            width_preview,
+            preview_width,
         }
     }
 
@@ -189,41 +344,15 @@ impl Toolbar {
     }
 
     pub fn connect_swatch_clicked<F: Fn() + 'static>(&self, f: F) {
-        let swatch_btn = self
-            .color_swatch
-            .parent()
-            .unwrap()
-            .downcast::<gtk::Button>()
-            .unwrap();
-        swatch_btn.connect_clicked(move |_| f());
+        self.swatch_btn.connect_clicked(move |_| f());
     }
 
     pub fn connect_preset_selected<F: Fn(gtk::gdk::RGBA) + 'static>(&self, f: F) {
         let f = Rc::new(f);
-        let presets = [colors::RED, colors::GREEN, colors::BLUE, colors::YELLOW];
-
-        // Children order: [tool_buttons...] [sep1] [swatch_btn] [preset_btns...] [sep2] [thickness]
-        // Preset buttons start at index: tool_buttons.len() + 1 (sep) + 1 (swatch) = len+2.
-        let sep1_idx = self.tool_buttons.len();
-        let start = sep1_idx + 2;
-
-        let container_child = self.container.first_child();
-        let mut children = Vec::new();
-        let mut child = container_child;
-        while let Some(c) = child {
-            children.push(c.clone());
-            child = c.next_sibling();
-        }
-
-        for (i, rgba) in presets.iter().enumerate() {
-            let idx = start + i;
-            if let Some(widget) = children.get(idx) {
-                if let Ok(btn) = widget.clone().downcast::<gtk::Button>() {
-                    let color = *rgba;
-                    let f = f.clone();
-                    btn.connect_clicked(move |_| f(color));
-                }
-            }
+        for pb in &self.preset_buttons {
+            let color = pb.color;
+            let f = f.clone();
+            pb.button.connect_clicked(move |_| f(color));
         }
     }
 
@@ -248,6 +377,15 @@ impl Toolbar {
         self.set_active_tool(*tool);
         self.thickness_label.set_text(&format!("{:.0}", line_width));
         *self.swatch_color.borrow_mut() = *color;
+        self.preview_width.set(line_width);
+        for pb in &self.preset_buttons {
+            if same_color(&pb.color, color) {
+                pb.button.add_css_class("selected");
+            } else {
+                pb.button.remove_css_class("selected");
+            }
+        }
         self.color_swatch.queue_draw();
+        self.width_preview.queue_draw();
     }
 }
