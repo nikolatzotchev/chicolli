@@ -1,15 +1,20 @@
 use std::any::Any;
 
 use crate::colors::{self, Color};
+use crate::geometry::arrow_head;
 
-use super::drawing_tool::{snap_angle, DrawingTool, Point};
+use super::drawing_tool::{report, set_source_color, snap_angle, DrawingTool, Point};
+
+/// Half the opening angle of the arrowhead (about 33 degrees).
+const HEAD_HALF_ANGLE: f64 = 0.58067840828;
+/// Smallest arrowhead length; thicker lines get proportionally bigger heads.
+const MIN_HEAD_LENGTH: f64 = 20.0;
+const HEAD_LENGTH_PER_WIDTH: f64 = 4.0;
 
 pub struct NormalArrow {
     start: Option<Point>,
     end: Option<Point>,
-    arrow_length: f64,
-    arrow_degree: f64,
-    arrow_width: f64,
+    line_width: f64,
     finished: bool,
     direction_head_base: bool,
     color: Color,
@@ -21,100 +26,73 @@ impl NormalArrow {
         NormalArrow {
             start: None,
             end: None,
-            arrow_length: 20.0,
-            arrow_degree: 0.58067840828,
-            arrow_width: 5.0,
+            line_width: 5.0,
             finished: false,
             direction_head_base: direction,
             color: colors::RED,
             constrained: false,
         }
     }
+
+    fn resolved_end(&self) -> Option<(Point, Point)> {
+        let (start, end) = (self.start?, self.end?);
+        let end = if self.constrained {
+            snap_angle(start, end)
+        } else {
+            end
+        };
+        Some((start, end))
+    }
 }
 
 impl DrawingTool for NormalArrow {
-    fn release_mouse(&mut self, point: super::drawing_tool::Point) {
-        self.end = Some(point);
-        self.finished = true;
+    fn release_mouse(&mut self, point: Point) {
+        if self.active() {
+            self.end = Some(point);
+            self.finished = true;
+        }
     }
 
-    fn press_mouse(&mut self, point: super::drawing_tool::Point) {
+    fn press_mouse(&mut self, point: Point) {
         self.start = Some(point);
     }
 
-    fn motion_notify(&mut self, point: super::drawing_tool::Point) {
-        if !self.finished {
+    fn motion_notify(&mut self, point: Point) {
+        if self.active() {
             self.end = Some(point)
         }
     }
 
     fn draw(&self, cnx: &gtk::cairo::Context) {
-        if let (Some(start), Some(raw_end)) = (self.start, self.end) {
-            let end = if self.constrained {
-                snap_angle(start, raw_end)
-            } else {
-                raw_end
-            };
-            let color = self.color;
-            cnx.set_source_rgb(
-                color.red().into(),
-                color.green().into(),
-                color.blue().into(),
-            );
-            cnx.set_line_cap(gtk::cairo::LineCap::Round);
-            cnx.set_line_join(gtk::cairo::LineJoin::Round);
-            cnx.set_line_width(self.arrow_width);
-            cnx.move_to(start.0, start.1);
-            cnx.line_to(end.0, end.1);
+        let Some((start, end)) = self.resolved_end() else {
+            return;
+        };
+        let (tail, tip) = if self.direction_head_base {
+            (end, start)
+        } else {
+            (start, end)
+        };
+        // A click without a drag has no direction to point in.
+        let head_length = MIN_HEAD_LENGTH.max(self.line_width * HEAD_LENGTH_PER_WIDTH);
+        let Some((wing1, wing2)) = arrow_head(tail, tip, head_length, HEAD_HALF_ANGLE) else {
+            return;
+        };
 
-            let angle_main_line = (end.1 - start.1).atan2(end.0 - start.0);
-
-            // the tips of the arrow lines
-            let (mut x1, mut y1): (f64, f64);
-            let (mut x2, mut y2): (f64, f64);
-
-            x1 = self.arrow_length * (angle_main_line - self.arrow_degree).cos();
-            y1 = self.arrow_length * (angle_main_line - self.arrow_degree).sin();
-            x2 = self.arrow_length * (angle_main_line + self.arrow_degree).cos();
-            y2 = self.arrow_length * (angle_main_line + self.arrow_degree).sin();
-
-            match self.direction_head_base {
-                true => {
-                    x1 += start.0;
-                    y1 += start.1;
-                    x2 += start.0;
-                    y2 += start.1;
-                }
-                false => {
-                    x1 = end.0 - x1;
-                    y1 = end.1 - y1;
-                    x2 = end.0 - x2;
-                    y2 = end.1 - y2;
-                }
-            }
-
-            match self.direction_head_base {
-                true => cnx.move_to(start.0, start.1),
-                false => cnx.move_to(end.0, end.1),
-            }
-
-            cnx.line_to(x1, y1);
-
-            match self.direction_head_base {
-                true => cnx.move_to(start.0, start.1),
-                false => cnx.move_to(end.0, end.1),
-            }
-
-            cnx.line_to(x2, y2);
-
-            if let Err(e) = cnx.stroke() {
-                println!("{e}")
-            }
-        }
+        set_source_color(cnx, self.color, 1.0);
+        cnx.set_line_cap(gtk::cairo::LineCap::Round);
+        cnx.set_line_join(gtk::cairo::LineJoin::Round);
+        cnx.set_line_width(self.line_width);
+        cnx.move_to(tail.0, tail.1);
+        cnx.line_to(tip.0, tip.1);
+        // Draw the head as one polyline so its joint is rounded like the rest of the arrow.
+        cnx.move_to(wing1.0, wing1.1);
+        cnx.line_to(tip.0, tip.1);
+        cnx.line_to(wing2.0, wing2.1);
+        report(cnx.stroke());
     }
 
     fn set_line_width(&mut self, width: f64) {
-        self.arrow_width = width;
+        self.line_width = width;
     }
 
     fn set_color(&mut self, color: crate::colors::Color) {
@@ -131,5 +109,12 @@ impl DrawingTool for NormalArrow {
 
     fn set_constrained(&mut self, constrained: bool) {
         self.constrained = constrained;
+    }
+
+    fn is_empty(&self) -> bool {
+        match self.resolved_end() {
+            Some((start, end)) => start.0 == end.0 && start.1 == end.1,
+            None => true,
+        }
     }
 }

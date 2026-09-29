@@ -51,12 +51,12 @@ shell.nix                # Nix development shell with native build dependencies
 
 ## Key Patterns
 
-- **DrawingTool trait** (`src/drawing/drawing_tool.rs`): All tools implement `DrawingTool` with `press_mouse`, `release_mouse`, `motion_notify`, `draw`, `set_line_width`, `set_color`, `active`, `as_any_mut`, and optional `set_constrained`.
+- **DrawingTool trait** (`src/drawing/drawing_tool.rs`): All tools implement `DrawingTool` with `press_mouse`, `release_mouse`, `motion_notify`, `draw`, `set_line_width`, `set_color`, `active`, `as_any_mut`, and optional `set_constrained` and `is_empty` (elements that would draw nothing are dropped on release so Undo never removes something invisible). Shared Cairo helpers (`set_source_color`, which honors the color's alpha, `stroke_smooth_path`, `stroke_relaxed_path`) live next to the trait.
 - **State management**: Uses `Rc<RefCell<T>>` for shared mutable state across GTK closures.
 - **Config**: JSON config at `~/.config/chicolli/chicolli.json` with keybinds and line thickness. Auto-created with defaults if missing. Partial configs merge with `Configuration::default()`.
 - **Cursors**: Current GTK cursors are generated at runtime in `src/cursors.rs` using Cairo and `gdk::MemoryTexture`. The `cursors/` PNGs remain bundled assets/documentation examples, but the app path currently uses generated cursors.
 - **Toolbar**: `src/toolbar.rs` owns tool toggles, color presets/chooser swatch, line-width buttons, and undo/clear buttons. Keep toolbar state synchronized with keyboard shortcuts and mouse-wheel changes via `Toolbar::update`.
-- **Constrained drawing**: `DrawingTool::set_constrained` is used for Shift-modified snapping. `snap_angle` and `snap_square` live in `drawing_tool.rs`.
+- **Constrained drawing**: `DrawingTool::set_constrained` is used for Shift-modified snapping. `snap_angle`, `snap_square`, the spline solver `spline_controls` and `arrow_head` live in `src/geometry.rs` (GTK-free, unit-tested in `tests/geometry_tests.rs`) and are re-exported where needed.
 - **Layer behavior**: The main window uses layer-shell overlay mode and exclusive keyboard mode. The color chooser is a popover on the toolbar swatch (a popup of the overlay, so tiling compositors never tile it); the key handler passes keys through while it is open.
 
 ## Code Style

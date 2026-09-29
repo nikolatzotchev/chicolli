@@ -17,6 +17,63 @@ pub mod drawing;
 pub mod geometry;
 pub mod toolbar;
 
+type Elements = Rc<RefCell<Vec<Box<dyn DrawingTool>>>>;
+
+/// Ends typing into the text label being edited, if any, leaving it where it is.
+/// A label that ended up with no text is removed so Undo never pops something invisible.
+fn end_text_input(elements: &Elements, text_input_mode: &RefCell<bool>) {
+    *text_input_mode.borrow_mut() = false;
+    let mut elems = elements.borrow_mut();
+    let Some(elem) = elems.last_mut() else {
+        return;
+    };
+    let Some(label) = elem
+        .as_any_mut()
+        .downcast_mut::<drawing::text_label::TextLabel>()
+    else {
+        return;
+    };
+    if !label.is_editing() {
+        return;
+    }
+    if label.is_empty() {
+        elems.pop();
+    } else {
+        label.commit();
+    }
+}
+
+/// Runs `f` on the text label being typed into, if there is one.
+fn with_editing_label<R>(
+    elements: &Elements,
+    f: impl FnOnce(&mut drawing::text_label::TextLabel) -> R,
+) -> Option<R> {
+    let mut elems = elements.borrow_mut();
+    let label = elems
+        .last_mut()?
+        .as_any_mut()
+        .downcast_mut::<drawing::text_label::TextLabel>()?;
+    label.is_editing().then(|| f(label))
+}
+
+/// Whether Shift is down after this key event. The event's modifier state is the one
+/// from before the key changed, so a Shift key's own press/release has to be applied.
+fn shift_after_key_event(keyval: Key, modifier: gtk::gdk::ModifierType, pressed: bool) -> bool {
+    match keyval {
+        Key::Shift_L | Key::Shift_R => pressed,
+        _ => modifier.contains(gtk::gdk::ModifierType::SHIFT_MASK),
+    }
+}
+
+/// Applies the Shift constraint to the element currently being drawn.
+fn constrain_active(elements: &Elements, shift: bool) {
+    if let Some(elem) = elements.borrow_mut().last_mut() {
+        if elem.active() {
+            elem.set_constrained(shift);
+        }
+    }
+}
+
 // https://github.com/wmww/gtk-layer-shell/blob/master/examples/simple-example.c
 fn activate(application: &gtk::Application) {
     // Create a normal GTK window however you like
@@ -67,7 +124,7 @@ fn activate(application: &gtk::Application) {
     }
 
     // main components
-    let elements: Rc<RefCell<Vec<Box<dyn DrawingTool>>>> = Rc::new(RefCell::new(Vec::new()));
+    let elements: Elements = Rc::new(RefCell::new(Vec::new()));
 
     let color = Rc::new(RefCell::new(colors::RED));
 
@@ -120,7 +177,13 @@ fn activate(application: &gtk::Application) {
         text_cur,
         #[strong]
         highlighter_cur,
+        #[strong]
+        elements,
+        #[strong]
+        text_input_mode,
         move |tool| {
+            end_text_input(&elements, &text_input_mode);
+            draw.queue_draw();
             *current_tool.borrow_mut() = tool;
             let cursor = match tool {
                 drawing::drawing_tool::CurrentDrawingTool::NormalLine => pencil_cur.clone(),
@@ -158,8 +221,15 @@ fn activate(application: &gtk::Application) {
         current_tool,
         #[strong]
         line_width,
+        #[strong]
+        elements,
+        #[weak]
+        draw,
         move |rgba| {
             *color.borrow_mut() = rgba;
+            // Recolor the label being typed, like the scroll wheel resizes it.
+            with_editing_label(&elements, |label| label.set_color(rgba));
+            draw.queue_draw();
             let tool = *current_tool.borrow();
             toolbar.borrow().update(&tool, &rgba, *line_width.borrow());
         },
@@ -174,8 +244,15 @@ fn activate(application: &gtk::Application) {
         current_tool,
         #[strong]
         line_width,
+        #[strong]
+        elements,
+        #[weak]
+        draw,
         move |rgba| {
             *color.borrow_mut() = rgba;
+            // Recolor the label being typed, like the scroll wheel resizes it.
+            with_editing_label(&elements, |label| label.set_color(rgba));
+            draw.queue_draw();
             let tool = *current_tool.borrow();
             toolbar.borrow().update(&tool, &rgba, *line_width.borrow());
         },
@@ -190,10 +267,17 @@ fn activate(application: &gtk::Application) {
         current_tool,
         #[strong]
         color,
+        #[strong]
+        elements,
+        #[weak]
+        draw,
         move |delta| {
             let mut width = line_width.borrow_mut();
             let new_width = *width + delta;
             *width = if new_width < 1.0 { 1.0 } else { new_width };
+            let w = *width;
+            with_editing_label(&elements, |label| label.set_line_width(w));
+            draw.queue_draw();
             let tool = *current_tool.borrow();
             let col = *color.borrow();
             toolbar.borrow().update(&tool, &col, *width);
@@ -254,92 +338,52 @@ fn activate(application: &gtk::Application) {
             if toolbar.borrow().color_chooser_open() {
                 return Propagation::Proceed;
             }
-            let is_shift = modifier.contains(gtk::gdk::ModifierType::SHIFT_MASK);
+            let is_shift = shift_after_key_event(keyval, modifier, true);
             *shift_held.borrow_mut() = is_shift;
-            if let Some(elem) = elements.borrow_mut().last_mut() {
-                if elem.active() {
-                    elem.set_constrained(is_shift);
-                }
-            }
+            constrain_active(&elements, is_shift);
             draw.queue_draw();
             if *text_input_mode.borrow() {
-                let _draw_key = Key::from_name(conf.draw_keybind.as_deref().unwrap_or(""))
-                    .unwrap_or(Key::Abelowdot);
-                let _arrow_key = Key::from_name(conf.arrow_keybind.as_deref().unwrap_or(""))
-                    .unwrap_or(Key::Abelowdot);
-                let _reverse_arrow_key =
-                    Key::from_name(conf.reverse_arrow_keybind.as_deref().unwrap_or(""))
-                        .unwrap_or(Key::Abelowdot);
-                let _rectangle_key =
-                    Key::from_name(conf.rectangle_keybind.as_deref().unwrap_or(""))
-                        .unwrap_or(Key::Abelowdot);
-                let _text_key = Key::from_name(conf.text_keybind.as_deref().unwrap_or(""))
-                    .unwrap_or(Key::Abelowdot);
-                let _highlighter_key =
-                    Key::from_name(conf.highlighter_keybind.as_deref().unwrap_or(""))
-                        .unwrap_or(Key::Abelowdot);
-
-                let is_tool_switch = keyval == _draw_key
-                    || keyval == _arrow_key
-                    || keyval == _reverse_arrow_key
-                    || keyval == _rectangle_key
-                    || keyval == _text_key
-                    || keyval == _highlighter_key;
-
-                if is_tool_switch || keyval == Key::Escape {
-                    if let Some(elem) = elements.borrow_mut().last_mut() {
-                        if let Some(text_tool) = elem
-                            .as_any_mut()
-                            .downcast_mut::<drawing::text_label::TextLabel>()
-                        {
-                            text_tool.finish();
-                        }
-                    }
-                    *text_input_mode.borrow_mut() = false;
-                    draw.queue_draw();
-                    if keyval == Key::Escape {
-                        return Propagation::Stop;
-                    }
-                } else {
-                    match keyval {
-                        Key::Return => {
-                            if let Some(elem) = elements.borrow_mut().last_mut() {
-                                if let Some(text_tool) =
-                                    elem.as_any_mut()
-                                        .downcast_mut::<drawing::text_label::TextLabel>()
-                                {
-                                    text_tool.finish();
-                                }
-                            }
-                            *text_input_mode.borrow_mut() = false;
-                        }
-                        Key::BackSpace => {
-                            if let Some(elem) = elements.borrow_mut().last_mut() {
-                                if let Some(text_tool) =
-                                    elem.as_any_mut()
-                                        .downcast_mut::<drawing::text_label::TextLabel>()
-                                {
-                                    text_tool.pop_char();
-                                }
-                            }
-                            draw.queue_draw();
-                        }
-                        _ => {
-                            if let Some(c) = keyval.to_unicode() {
-                                if !c.is_control() {
-                                    if let Some(elem) = elements.borrow_mut().last_mut() {
-                                        if let Some(text_tool) =
-                                            elem.as_any_mut()
-                                                .downcast_mut::<drawing::text_label::TextLabel>()
-                                        {
-                                            text_tool.push_char(c);
-                                        }
-                                    }
+                let ctrl = modifier.contains(gtk::gdk::ModifierType::CONTROL_MASK);
+                if ctrl && matches!(keyval, Key::v | Key::V) {
+                    draw.clipboard().read_text_async(
+                        None::<&gtk::gio::Cancellable>,
+                        glib::clone!(
+                            #[strong]
+                            elements,
+                            #[weak]
+                            draw,
+                            move |result| {
+                                if let Ok(Some(text)) = result {
+                                    with_editing_label(&elements, |label| label.push_str(&text));
                                     draw.queue_draw();
                                 }
+                            },
+                        ),
+                    );
+                    return Propagation::Stop;
+                }
+                if ctrl {
+                    // Other Ctrl shortcuts (undo, clear) end typing and then run as usual.
+                    end_text_input(&elements, &text_input_mode);
+                } else {
+                    // Every other key is text, including the digits and letters that
+                    // switch tools outside of typing. Escape or Return finish the label.
+                    match keyval {
+                        Key::Escape => end_text_input(&elements, &text_input_mode),
+                        Key::Return | Key::KP_Enter if is_shift => {
+                            with_editing_label(&elements, |label| label.push_char('\n'));
+                        }
+                        Key::Return | Key::KP_Enter => end_text_input(&elements, &text_input_mode),
+                        Key::BackSpace => {
+                            with_editing_label(&elements, |label| label.pop_char());
+                        }
+                        _ => {
+                            if let Some(c) = keyval.to_unicode().filter(|c| !c.is_control()) {
+                                with_editing_label(&elements, |label| label.push_char(c));
                             }
                         }
                     }
+                    draw.queue_draw();
                     return Propagation::Stop;
                 }
             }
@@ -434,12 +478,14 @@ fn activate(application: &gtk::Application) {
                 _ if _undo_key == keyval
                     && modifier.contains(gtk::gdk::ModifierType::CONTROL_MASK) =>
                 {
+                    *text_input_mode.borrow_mut() = false;
                     elements.borrow_mut().pop();
                     draw.queue_draw();
                 }
                 _ if _clear_all_key == keyval
                     && modifier.contains(gtk::gdk::ModifierType::CONTROL_MASK) =>
                 {
+                    *text_input_mode.borrow_mut() = false;
                     elements.borrow_mut().clear();
                     draw.queue_draw();
                 }
@@ -464,14 +510,10 @@ fn activate(application: &gtk::Application) {
         elements,
         #[weak]
         draw,
-        move |_, _, _, modifier| {
-            let is_shift = modifier.contains(gtk::gdk::ModifierType::SHIFT_MASK);
+        move |_, keyval, _, modifier| {
+            let is_shift = shift_after_key_event(keyval, modifier, false);
             *shift_held.borrow_mut() = is_shift;
-            if let Some(elem) = elements.borrow_mut().last_mut() {
-                if elem.active() {
-                    elem.set_constrained(is_shift);
-                }
-            }
+            constrain_active(&elements, is_shift);
             draw.queue_draw();
         },
     ));
@@ -486,8 +528,19 @@ fn activate(application: &gtk::Application) {
         draw,
         #[strong]
         elements,
-        move |_, x, y| {
+        #[strong]
+        shift_held,
+        move |ctrl, x, y| {
+            // The pointer event's modifier state is authoritative: it also catches Shift
+            // pressed or released while keyboard focus was elsewhere.
+            let shift = ctrl
+                .current_event_state()
+                .contains(gtk::gdk::ModifierType::SHIFT_MASK);
+            *shift_held.borrow_mut() = shift;
             if let Some(elem) = elements.borrow_mut().last_mut() {
+                if elem.active() {
+                    elem.set_constrained(shift);
+                }
                 elem.motion_notify(drawing::drawing_tool::Point(x, y));
                 if elem.active() {
                     draw.queue_draw();
@@ -530,20 +583,34 @@ fn activate(application: &gtk::Application) {
         color,
         #[weak]
         draw,
-        move |_, _, x, y| {
-            {
+        #[strong]
+        shift_held,
+        move |gesture, _, x, y| {
+            // Clicking somewhere else ends typing into the previous label.
+            end_text_input(&elements, &text_input_mode);
+            let point = drawing::drawing_tool::Point(x, y);
+            if *current_tool.borrow() == drawing::drawing_tool::CurrentDrawingTool::TextLabel {
+                // Clicking an existing label picks it up: drag to move it, type to extend it.
                 let mut elems = elements.borrow_mut();
-                if let Some(elem) = elems.last_mut() {
-                    if let Some(text_tool) = elem
+                let hit = elems.iter_mut().rposition(|elem| {
+                    elem.as_any_mut()
+                        .downcast_mut::<drawing::text_label::TextLabel>()
+                        .is_some_and(|label| label.contains(point))
+                });
+                if let Some(index) = hit {
+                    // Move it to the end: the last element is the one being edited.
+                    let mut elem = elems.remove(index);
+                    if let Some(label) = elem
                         .as_any_mut()
                         .downcast_mut::<drawing::text_label::TextLabel>()
                     {
-                        if text_tool.is_movable() {
-                            text_tool.finalize();
-                            draw.queue_draw();
-                            return;
-                        }
+                        label.edit_and_grab(point);
                     }
+                    elems.push(elem);
+                    *text_input_mode.borrow_mut() = true;
+                    draw.grab_focus();
+                    draw.queue_draw();
+                    return;
                 }
             }
             let mut drawing_tool: Box<dyn drawing::drawing_tool::DrawingTool> =
@@ -569,25 +636,38 @@ fn activate(application: &gtk::Application) {
                         Box::new(drawing::text_label::TextLabel::new())
                     }
                 };
-            drawing_tool.press_mouse(drawing::drawing_tool::Point(x, y));
-            if !matches!(
-                *current_tool.borrow(),
-                drawing::drawing_tool::CurrentDrawingTool::Highlighter
-            ) {
-                drawing_tool.set_line_width(*line_width.borrow());
-                drawing_tool.set_color(*color.borrow());
-            }
+            drawing_tool.press_mouse(point);
+            drawing_tool.set_line_width(*line_width.borrow());
+            drawing_tool.set_color(*color.borrow());
+            // Shift may already be held before the shape exists.
+            let shift = gesture
+                .current_event_state()
+                .contains(gtk::gdk::ModifierType::SHIFT_MASK)
+                || *shift_held.borrow();
+            drawing_tool.set_constrained(shift);
             elements.borrow_mut().push(drawing_tool);
+            draw.queue_draw();
         },
     ));
 
     left_click_mouse.connect_released(glib::clone!(
         #[strong]
         elements,
+        #[weak]
+        draw,
         move |_, _, x, y| {
-            if let Some(elem) = elements.borrow_mut().last_mut() {
+            let mut elems = elements.borrow_mut();
+            if let Some(elem) = elems.last_mut() {
+                if !elem.active() {
+                    return;
+                }
                 elem.release_mouse(drawing::drawing_tool::Point(x, y));
+                // A click that drew nothing (e.g. an arrow without a drag) is dropped.
+                if !elem.active() && elem.is_empty() {
+                    elems.pop();
+                }
             }
+            draw.queue_draw();
         },
     ));
 
@@ -641,13 +721,9 @@ fn activate(application: &gtk::Application) {
         #[weak]
         elements,
         move |_, ctx, _, _| {
-            for element in elements.borrow_mut().iter() {
+            for element in elements.borrow().iter() {
                 element.draw(ctx);
             }
-
-            if let Err(error) = ctx.fill() {
-                panic!("error drawing: {:?}", error)
-            };
         },
     ));
 

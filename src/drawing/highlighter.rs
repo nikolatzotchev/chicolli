@@ -4,16 +4,19 @@ use gtk::cairo::Context;
 
 use crate::colors;
 
-use super::drawing_tool::{DrawingTool, Point};
-use super::normal_line::calc_whole_spline;
+use super::drawing_tool::{set_source_color, stroke_relaxed_path, DrawingTool, Point};
+use super::normal_line::Freehand;
+
+/// Opacity applied on top of the chosen color's own alpha.
+const ALPHA: f64 = 0.4;
+/// The highlighter is this many times wider than the selected line width, so the
+/// default width of 5 gives the classic 20 px marker.
+pub const WIDTH_FACTOR: f64 = 4.0;
 
 pub struct Highlighter {
-    points: Vec<Point>,
-    finished: bool,
-    started: bool,
+    stroke: Freehand,
     line_width: f64,
     color: colors::Color,
-    alpha: f64,
 }
 
 impl Default for Highlighter {
@@ -25,118 +28,35 @@ impl Default for Highlighter {
 impl Highlighter {
     pub fn new() -> Highlighter {
         Highlighter {
-            points: Vec::new(),
-            finished: false,
-            started: false,
+            stroke: Freehand::default(),
             line_width: 20.0,
             color: colors::YELLOW,
-            alpha: 0.4,
         }
     }
 }
 
 impl DrawingTool for Highlighter {
     fn release_mouse(&mut self, point: Point) {
-        if self.active() {
-            if let Some(last) = self.points.last() {
-                if last.0 != point.0 || last.1 != point.1 {
-                    self.points.push(point);
-                }
-            } else {
-                self.points.push(point);
-            }
-        }
-        self.finished = true;
+        self.stroke.release(point);
     }
 
     fn press_mouse(&mut self, point: Point) {
-        self.started = true;
-        self.points.push(point);
+        self.stroke.press(point);
     }
 
     fn motion_notify(&mut self, point: Point) {
-        if self.active() {
-            self.points.push(point);
-        }
+        self.stroke.motion(point);
     }
 
     fn draw(&self, ctx: &Context) {
-        if self.points.is_empty() {
-            return;
-        }
-
-        let color = self.color;
-        ctx.set_source_rgba(
-            color.red().into(),
-            color.green().into(),
-            color.blue().into(),
-            self.alpha,
-        );
-        ctx.set_line_width(self.line_width);
-        ctx.set_line_cap(gtk::cairo::LineCap::Round);
-        ctx.set_line_join(gtk::cairo::LineJoin::Round);
-
-        let n = self.points.len();
-
-        if n == 1 {
-            let p = self.points[0];
-            ctx.arc(p.0, p.1, self.line_width / 2.0, 0.0, std::f64::consts::TAU);
-            if let Err(e) = ctx.fill() {
-                panic!("{e}");
-            }
-            return;
-        }
-
-        if n == 2 {
-            ctx.move_to(self.points[0].0, self.points[0].1);
-            ctx.line_to(self.points[1].0, self.points[1].1);
-            if let Err(e) = ctx.stroke() {
-                panic!("{e}");
-            }
-            return;
-        }
-
-        if n == 3 {
-            let p0 = self.points[0];
-            let p1 = self.points[1];
-            let p2 = self.points[2];
-            ctx.move_to(p0.0, p0.1);
-            ctx.curve_to(
-                p0.0 + (p1.0 - p0.0) * 0.5,
-                p0.1 + (p1.1 - p0.1) * 0.5,
-                p1.0 + (p2.0 - p1.0) * 0.5,
-                p1.1 + (p2.1 - p1.1) * 0.5,
-                p2.0,
-                p2.1,
-            );
-            if let Err(e) = ctx.stroke() {
-                panic!("{e}");
-            }
-            return;
-        }
-
-        let controls = calc_whole_spline(&self.points);
-        let first_point = self.points[0];
-        ctx.move_to(first_point.0, first_point.1);
-        for i in 0..n - 1 {
-            let p_0 = self.points[i];
-            let p_1 = self.points[i + 1];
-            ctx.curve_to(
-                p_0.0 + controls[i].0,
-                p_0.1 + controls[i].1,
-                p_1.0 - controls[i + 1].0,
-                p_1.1 - controls[i + 1].1,
-                p_1.0,
-                p_1.1,
-            );
-        }
-        if let Err(e) = ctx.stroke() {
-            panic!("{e}");
-        }
+        // Draw the stroke as one path so overlapping parts do not stack up darker.
+        set_source_color(ctx, self.color, ALPHA);
+        stroke_relaxed_path(ctx, self.stroke.points(), self.line_width);
     }
 
     fn set_line_width(&mut self, width: f64) {
-        self.line_width = width;
+        self.line_width = width * WIDTH_FACTOR;
+        self.stroke.set_min_distance(self.line_width / 2.0);
     }
 
     fn set_color(&mut self, color: colors::Color) {
@@ -144,7 +64,7 @@ impl DrawingTool for Highlighter {
     }
 
     fn active(&mut self) -> bool {
-        self.started && !self.finished
+        self.stroke.active()
     }
 
     fn as_any_mut(&mut self) -> &mut dyn Any {

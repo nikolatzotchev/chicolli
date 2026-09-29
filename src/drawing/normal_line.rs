@@ -3,21 +3,86 @@ use std::any::Any;
 use gtk::cairo::Context;
 
 use crate::colors;
+use crate::geometry::distance_sq;
 
-use super::drawing_tool::{DrawingTool, Point};
+use super::drawing_tool::{set_source_color, stroke_smooth_path, DrawingTool, Point};
 
-const MIN_POINT_DISTANCE_SQ: f64 = 4.0;
+/// Motion events closer than this (in px) to the last kept point are skipped, so pointer
+/// jitter does not put tiny wiggles into the spline.
+pub const MIN_POINT_DISTANCE: f64 = 2.0;
 
-fn distance_sq(a: &Point, b: &Point) -> f64 {
-    let dx = a.0 - b.0;
-    let dy = a.1 - b.1;
-    dx * dx + dy * dy
+/// The points of a freehand stroke, shared by the pen and the highlighter.
+pub struct Freehand {
+    points: Vec<Point>,
+    started: bool,
+    finished: bool,
+    min_distance_sq: f64,
+}
+
+impl Default for Freehand {
+    fn default() -> Self {
+        Self {
+            points: Vec::new(),
+            started: false,
+            finished: false,
+            min_distance_sq: MIN_POINT_DISTANCE * MIN_POINT_DISTANCE,
+        }
+    }
+}
+
+impl Freehand {
+    /// Wide strokes need sparser points: jitter smaller than the stroke's half width
+    /// bends the curve tighter than the pen, which shows up as scalloped edges.
+    pub fn set_min_distance(&mut self, distance: f64) {
+        let distance = distance.max(MIN_POINT_DISTANCE);
+        self.min_distance_sq = distance * distance;
+    }
+
+    pub fn press(&mut self, point: Point) {
+        self.started = true;
+        self.points.push(point);
+    }
+
+    pub fn motion(&mut self, point: Point) {
+        if !self.active() {
+            return;
+        }
+        if let Some(&last) = self.points.last() {
+            if distance_sq(last, point) < self.min_distance_sq {
+                return;
+            }
+        }
+        self.points.push(point);
+    }
+
+    pub fn release(&mut self, point: Point) {
+        if !self.active() {
+            return;
+        }
+        match self.points.last() {
+            Some(&last) if distance_sq(last, point) < self.min_distance_sq => {
+                // Snap the end of the stroke to where the button came up instead of
+                // adding a near-duplicate point that would kink the curve.
+                if self.points.len() > 1 {
+                    *self.points.last_mut().unwrap() = point;
+                }
+            }
+            _ => self.points.push(point),
+        }
+        self.finished = true;
+    }
+
+    pub fn active(&self) -> bool {
+        self.started && !self.finished
+    }
+
+    pub fn points(&self) -> &[Point] {
+        &self.points
+    }
 }
 
 pub struct NormalLine {
-    points: Vec<Point>,
-    finished: bool,
-    started: bool,
+    stroke: Freehand,
     line_width: f64,
     color: colors::Color,
 }
@@ -31,137 +96,29 @@ impl Default for NormalLine {
 impl NormalLine {
     pub fn new() -> NormalLine {
         NormalLine {
-            points: Vec::new(),
-            finished: false,
-            started: false,
+            stroke: Freehand::default(),
             line_width: 5.0,
             color: colors::RED,
         }
     }
 }
 
-// https://www.ibiblio.org/e-notes/Splines/b-int.html
-pub fn calc_whole_spline(points: &[Point]) -> Vec<Point> {
-    let num_points = points.len();
-    if num_points < 4 {
-        return vec![];
-    }
-    let mut a = vec![Point(0.0, 0.0); num_points];
-    let mut b = vec![0.0; num_points];
-    b[1] = -0.25;
-    let mut d = vec![Point(0.0, 0.0); num_points];
-    d[0] = (points[1] - points[0]) / 3.0;
-    d[num_points - 1] = (points[num_points - 1] - points[num_points - 2]) / 3.0;
-
-    a[1] = (points[2] - points[0] - d[0]) / 4.0;
-    for i in 2..num_points - 1 {
-        b[i] = -1.0 / (4.0 + b[i - 1]);
-        a[i] = -(points[i + 1] - points[i - 1] - a[i - 1]) * b[i];
-    }
-    for i in (1..num_points - 2).rev() {
-        d[i] = a[i] + d[i + 1] * b[i];
-    }
-    d
-}
-
 impl DrawingTool for NormalLine {
     fn release_mouse(&mut self, point: Point) {
-        if self.active()
-            && (self.points.is_empty() || distance_sq(self.points.last().unwrap(), &point) > 0.0)
-        {
-            self.points.push(point);
-        }
-        self.finished = true;
+        self.stroke.release(point);
     }
 
     fn press_mouse(&mut self, point: Point) {
-        self.started = true;
-        self.points.push(point);
+        self.stroke.press(point);
     }
 
     fn motion_notify(&mut self, point: Point) {
-        if self.active() {
-            if let Some(last) = self.points.last() {
-                if distance_sq(last, &point) < MIN_POINT_DISTANCE_SQ {
-                    return;
-                }
-            }
-            self.points.push(point);
-        }
+        self.stroke.motion(point);
     }
 
     fn draw(&self, ctx: &Context) {
-        if self.points.is_empty() {
-            return;
-        }
-
-        let color = self.color;
-        ctx.set_source_rgb(
-            color.red().into(),
-            color.green().into(),
-            color.blue().into(),
-        );
-        ctx.set_line_width(self.line_width);
-        ctx.set_line_cap(gtk::cairo::LineCap::Round);
-        ctx.set_line_join(gtk::cairo::LineJoin::Round);
-
-        let n = self.points.len();
-
-        if n == 1 {
-            let p = self.points[0];
-            ctx.arc(p.0, p.1, self.line_width / 2.0, 0.0, std::f64::consts::TAU);
-            if let Err(e) = ctx.fill() {
-                panic!("{e}");
-            }
-            return;
-        }
-
-        if n == 2 {
-            ctx.move_to(self.points[0].0, self.points[0].1);
-            ctx.line_to(self.points[1].0, self.points[1].1);
-            if let Err(e) = ctx.stroke() {
-                panic!("{e}");
-            }
-            return;
-        }
-
-        if n == 3 {
-            let p0 = self.points[0];
-            let p1 = self.points[1];
-            let p2 = self.points[2];
-            ctx.move_to(p0.0, p0.1);
-            ctx.curve_to(
-                p0.0 + (p1.0 - p0.0) * 0.5,
-                p0.1 + (p1.1 - p0.1) * 0.5,
-                p1.0 + (p2.0 - p1.0) * 0.5,
-                p1.1 + (p2.1 - p1.1) * 0.5,
-                p2.0,
-                p2.1,
-            );
-            if let Err(e) = ctx.stroke() {
-                panic!("{e}");
-            }
-            return;
-        }
-
-        let controls = calc_whole_spline(&self.points);
-        let first_point = self.points[0];
-        ctx.move_to(first_point.0, first_point.1);
-        for i in 0..n - 1 {
-            let p_0 = self.points[i];
-            let p_1 = self.points[i + 1];
-            ctx.curve_to(
-                p_0.0 + controls[i].0,
-                p_0.1 + controls[i].1,
-                p_1.0 - controls[i + 1].0,
-                p_1.1 - controls[i + 1].1,
-                p_1.0,
-                p_1.1,
-            );
-        }
-        if let Err(e) = ctx.stroke() {
-            panic!("{e}");
-        }
+        set_source_color(ctx, self.color, 1.0);
+        stroke_smooth_path(ctx, self.stroke.points(), self.line_width);
     }
 
     fn set_line_width(&mut self, width: f64) {
@@ -173,7 +130,7 @@ impl DrawingTool for NormalLine {
     }
 
     fn active(&mut self) -> bool {
-        self.started && !self.finished
+        self.stroke.active()
     }
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
