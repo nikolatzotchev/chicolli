@@ -8,6 +8,12 @@ package = "gtk4"
 version = "0.10"
 features = ["v4_10"]
 
+[features]
+default = ["hidpi-cursors"]
+# Renders tool cursors at the output's scale so they stay sharp on HiDPI screens.
+# Needs GTK 4.16 or newer; build with `--no-default-features` on older GTK.
+hidpi-cursors = ["gtk/v4_16"]
+
 [dependencies]
 gio = "0.21"
 gtk4-layer-shell = "0.7.1"

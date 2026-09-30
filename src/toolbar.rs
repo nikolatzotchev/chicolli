@@ -89,7 +89,9 @@ fn draw_color_dot(ctx: &cairo::Context, c: &gtk::gdk::RGBA, w: f64, h: f64) {
     let _ = ctx.stroke();
 }
 
-fn draw_arrow_icon(ctx: &cairo::Context, s: f64, pointing_right: bool) {
+/// Adds the arrow icon's path (shaft plus open head) in an `s`-sized box; the tool
+/// cursors reuse it for their badge so both show the same glyph.
+pub(crate) fn arrow_icon_path(ctx: &cairo::Context, s: f64, pointing_right: bool) {
     let (tail, head) = if pointing_right {
         (0.18 * s, 0.82 * s)
     } else {
@@ -102,7 +104,11 @@ fn draw_arrow_icon(ctx: &cairo::Context, s: f64, pointing_right: bool) {
     ctx.move_to(head + dir * 0.28 * s, y - 0.24 * s);
     ctx.line_to(head, y);
     ctx.line_to(head + dir * 0.28 * s, y + 0.24 * s);
-    let _ = ctx.stroke();
+}
+
+/// Adds the rectangle icon's path in an `s`-sized box, shared with the tool cursors.
+pub(crate) fn rectangle_icon_path(ctx: &cairo::Context, s: f64) {
+    ctx.rectangle(0.16 * s, 0.26 * s, 0.68 * s, 0.48 * s);
 }
 
 /// Draws a monochrome icon for `tool` in the widget's current foreground color.
@@ -120,10 +126,16 @@ fn draw_tool_icon(ctx: &cairo::Context, tool: CurrentDrawingTool, fg: &gtk::gdk:
             ctx.curve_to(0.58 * s, 0.80 * s, 0.74 * s, 0.80 * s, 0.86 * s, 0.28 * s);
             let _ = ctx.stroke();
         }
-        CurrentDrawingTool::NormalArrowHeadPointer => draw_arrow_icon(ctx, s, true),
-        CurrentDrawingTool::NormalArrowHeadBase => draw_arrow_icon(ctx, s, false),
+        CurrentDrawingTool::NormalArrowHeadPointer => {
+            arrow_icon_path(ctx, s, true);
+            let _ = ctx.stroke();
+        }
+        CurrentDrawingTool::NormalArrowHeadBase => {
+            arrow_icon_path(ctx, s, false);
+            let _ = ctx.stroke();
+        }
         CurrentDrawingTool::NormalRectangle => {
-            ctx.rectangle(0.16 * s, 0.26 * s, 0.68 * s, 0.48 * s);
+            rectangle_icon_path(ctx, s);
             let _ = ctx.stroke();
         }
         CurrentDrawingTool::Highlighter => {

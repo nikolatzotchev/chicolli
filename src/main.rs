@@ -158,20 +158,11 @@ fn activate(application: &gtk::Application) {
     let key_controller = gtk::EventControllerKey::new();
     key_controller.set_propagation_phase(gtk::PropagationPhase::Capture);
 
-    // generate tool cursors at runtime using Cairo
-    let pencil_cur = cursors::pencil_cursor();
-    let arrow_cur = cursors::arrow_cursor();
-    let rectangle_cur = cursors::rectangle_cursor();
-    let text_cur = cursors::text_cursor();
-    let highlighter_cur = cursors::highlighter_cursor();
-
     // Set up a widget
     let draw = gtk::DrawingArea::new();
     draw.set_focusable(true);
-    // the default cursor should be the pencil one
-    if let Some(pencil_cur) = pencil_cur.clone() {
-        draw.set_cursor(Some(&pencil_cur));
-    }
+    let cursor = Rc::new(cursors::ToolCursor::new(&draw));
+    cursor.show(*current_tool.borrow(), *color.borrow());
 
     let line_width = Rc::new(RefCell::new(conf.line_thickness.unwrap_or(2.0)));
 
@@ -188,15 +179,9 @@ fn activate(application: &gtk::Application) {
         #[strong]
         draw,
         #[strong]
-        pencil_cur,
+        cursor,
         #[strong]
-        arrow_cur,
-        #[strong]
-        rectangle_cur,
-        #[strong]
-        text_cur,
-        #[strong]
-        highlighter_cur,
+        color,
         #[strong]
         elements,
         #[strong]
@@ -213,19 +198,7 @@ fn activate(application: &gtk::Application) {
             end_text_input(&elements, &text_input_mode);
             draw.queue_draw();
             *current_tool.borrow_mut() = tool;
-            let cursor = match tool {
-                drawing::drawing_tool::CurrentDrawingTool::NormalLine => pencil_cur.clone(),
-                drawing::drawing_tool::CurrentDrawingTool::NormalArrowHeadBase
-                | drawing::drawing_tool::CurrentDrawingTool::NormalArrowHeadPointer => {
-                    arrow_cur.clone()
-                }
-                drawing::drawing_tool::CurrentDrawingTool::NormalRectangle => rectangle_cur.clone(),
-                drawing::drawing_tool::CurrentDrawingTool::TextLabel => text_cur.clone(),
-                drawing::drawing_tool::CurrentDrawingTool::Highlighter => highlighter_cur.clone(),
-            };
-            if let Some(c) = cursor {
-                draw.set_cursor(Some(&c));
-            }
+            cursor.show(tool, *color.borrow());
         },
     ));
 
@@ -242,6 +215,8 @@ fn activate(application: &gtk::Application) {
 
     toolbar.borrow().connect_color_chosen(glib::clone!(
         #[strong]
+        cursor,
+        #[strong]
         color,
         #[strong]
         toolbar,
@@ -259,12 +234,15 @@ fn activate(application: &gtk::Application) {
             with_editing_label(&elements, |label| label.set_color(rgba));
             draw.queue_draw();
             let tool = *current_tool.borrow();
+            cursor.show(tool, rgba);
             toolbar.borrow().update(&tool, &rgba, *line_width.borrow());
         },
     ));
 
     toolbar.borrow().connect_preset_selected(glib::clone!(
         #[strong]
+        cursor,
+        #[strong]
         color,
         #[strong]
         toolbar,
@@ -282,6 +260,7 @@ fn activate(application: &gtk::Application) {
             with_editing_label(&elements, |label| label.set_color(rgba));
             draw.queue_draw();
             let tool = *current_tool.borrow();
+            cursor.show(tool, rgba);
             toolbar.borrow().update(&tool, &rgba, *line_width.borrow());
         },
     ));
@@ -369,6 +348,8 @@ fn activate(application: &gtk::Application) {
     ));
 
     key_controller.connect_key_pressed(glib::clone!(
+        #[strong]
+        cursor,
         #[strong]
         draw,
         #[strong(rename_to = w)]
@@ -480,44 +461,26 @@ fn activate(application: &gtk::Application) {
                 _ if _draw_key == keyval => {
                     *current_tool.borrow_mut() =
                         drawing::drawing_tool::CurrentDrawingTool::NormalLine;
-                    if let Some(pencil_cur) = pencil_cur.clone() {
-                        draw.set_cursor(Some(&pencil_cur));
-                    }
                 }
                 _ if _arrow_key == keyval => {
                     *current_tool.borrow_mut() =
                         drawing::drawing_tool::CurrentDrawingTool::NormalArrowHeadPointer;
-                    if let Some(arrow_cur) = arrow_cur.clone() {
-                        draw.set_cursor(Some(&arrow_cur));
-                    }
                 }
                 _ if _reverse_arrow_key == keyval => {
                     *current_tool.borrow_mut() =
                         drawing::drawing_tool::CurrentDrawingTool::NormalArrowHeadBase;
-                    if let Some(arrow_cur) = arrow_cur.clone() {
-                        draw.set_cursor(Some(&arrow_cur));
-                    }
                 }
                 _ if _rectangle_key == keyval => {
                     *current_tool.borrow_mut() =
                         drawing::drawing_tool::CurrentDrawingTool::NormalRectangle;
-                    if let Some(rectangle_cur) = rectangle_cur.clone() {
-                        draw.set_cursor(Some(&rectangle_cur));
-                    }
                 }
                 _ if _text_key == keyval => {
                     *current_tool.borrow_mut() =
                         drawing::drawing_tool::CurrentDrawingTool::TextLabel;
-                    if let Some(text_cur) = text_cur.clone() {
-                        draw.set_cursor(Some(&text_cur));
-                    }
                 }
                 _ if _highlighter_key == keyval => {
                     *current_tool.borrow_mut() =
                         drawing::drawing_tool::CurrentDrawingTool::Highlighter;
-                    if let Some(highlighter_cur) = highlighter_cur.clone() {
-                        draw.set_cursor(Some(&highlighter_cur));
-                    }
                 }
                 _ if _disable_drawing_key == keyval => {
                     end_text_input(&elements, &text_input_mode);
@@ -551,6 +514,7 @@ fn activate(application: &gtk::Application) {
             let tool = *current_tool.borrow();
             let col = *color.borrow();
             let lw = *line_width.borrow();
+            cursor.show(tool, col);
             toolbar.borrow().update(&tool, &col, lw);
             Propagation::Proceed
         },
@@ -782,6 +746,10 @@ fn activate(application: &gtk::Application) {
 
     // load css for the transparency of the window
     let provider = gtk::CssProvider::new();
+    // `load_from_data` is deprecated from GTK 4.12, which the `hidpi-cursors` feature requires.
+    #[cfg(feature = "hidpi-cursors")]
+    provider.load_from_string(include_str!("styles/style.css"));
+    #[cfg(not(feature = "hidpi-cursors"))]
     provider.load_from_data(include_str!("styles/style.css"));
     gtk::style_context_add_provider_for_display(
         &Display::default().expect("error getting default display"),

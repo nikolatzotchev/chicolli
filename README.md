@@ -11,12 +11,12 @@ A GTK4 shell drawing tool for Wayland. Renders a transparent fullscreen overlay 
 - Highlighter (semi-transparent freehand drawing in the selected color, four times the line width)
 - Quick color switching (red, green, blue) and a color chooser popover
 - Adjustable line thickness via scroll wheel
-- Custom cursors per tool
+- Per-tool cursors that show the current color and stay sharp on HiDPI screens
 - Configurable keybindings
 
 ## Dependencies
 
-- GTK4
+- GTK4 (4.16 or newer; see below for older versions)
 - gtk4-layer-shell
 - Wayland compositor
 - pkg-config
@@ -50,6 +50,12 @@ cargo build
 
 ```sh
 cargo build --release
+```
+
+The default `hidpi-cursors` feature renders the tool cursors at your output's scale and needs GTK 4.16 or newer. On older GTK (for example Ubuntu 24.04, which ships 4.14), build without it; the cursors are then drawn at 1x and scaled by the compositor:
+
+```sh
+cargo build --release --no-default-features
 ```
 
 ## Installation
