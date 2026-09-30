@@ -75,9 +75,10 @@ fn constrain_active(elements: &Elements, shift: bool) {
 }
 
 /// Switches between drawing and pass-through. In pass-through the drawing stays on screen
-/// while clicks and keys go to the windows underneath and the toolbar is hidden.
-fn set_pass_through(window: &gtk::ApplicationWindow, toolbar: &gtk::Box, on: bool) {
-    toolbar.set_visible(!on);
+/// while clicks and keys go to the windows underneath; only the toolbar still takes clicks,
+/// so its pass-through toggle can switch back.
+fn set_pass_through(window: &gtk::ApplicationWindow, toolbar: &toolbar::Toolbar, on: bool) {
+    toolbar.set_pass_through(on);
     window.set_keyboard_mode(if on {
         KeyboardMode::None
     } else {
@@ -85,7 +86,15 @@ fn set_pass_through(window: &gtk::ApplicationWindow, toolbar: &gtk::Box, on: boo
     });
     if let Some(surface) = window.surface() {
         let region = if on {
-            Region::create()
+            match toolbar.widget().compute_bounds(window) {
+                Some(b) => Region::create_rectangle(&RectangleInt::new(
+                    b.x().floor() as i32,
+                    b.y().floor() as i32,
+                    b.width().ceil() as i32,
+                    b.height().ceil() as i32,
+                )),
+                None => Region::create(),
+            }
         } else {
             Region::create_rectangle(&RectangleInt::new(0, 0, surface.width(), surface.height()))
         };
@@ -192,7 +201,15 @@ fn activate(application: &gtk::Application) {
         elements,
         #[strong]
         text_input_mode,
+        #[weak]
+        window,
+        #[strong]
+        toolbar,
         move |tool| {
+            // Picking a tool while passing clicks through means the user wants to draw again.
+            if toolbar.borrow().pass_through() {
+                set_pass_through(&window, &toolbar.borrow(), false);
+            }
             end_text_input(&elements, &text_input_mode);
             draw.queue_draw();
             *current_tool.borrow_mut() = tool;
@@ -320,10 +337,10 @@ fn activate(application: &gtk::Application) {
         text_input_mode,
         #[weak]
         draw,
-        move || {
+        move |on| {
             end_text_input(&elements, &text_input_mode);
             draw.queue_draw();
-            set_pass_through(&window, toolbar.borrow().widget(), true);
+            set_pass_through(&window, &toolbar.borrow(), on);
         },
     ));
 
@@ -334,7 +351,7 @@ fn activate(application: &gtk::Application) {
         window,
         #[strong]
         toolbar,
-        move |_| set_pass_through(&window, toolbar.borrow().widget(), false),
+        move |_| set_pass_through(&window, &toolbar.borrow(), false),
     ));
 
     toolbar.borrow().connect_clear(glib::clone!(
@@ -505,7 +522,7 @@ fn activate(application: &gtk::Application) {
                 _ if _disable_drawing_key == keyval => {
                     end_text_input(&elements, &text_input_mode);
                     draw.queue_draw();
-                    set_pass_through(&w, toolbar.borrow().widget(), true);
+                    set_pass_through(&w, &toolbar.borrow(), true);
                 }
                 // colors
                 _ if _color_r == keyval => *color.borrow_mut() = colors::RED,
