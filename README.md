@@ -12,6 +12,7 @@ A GTK4 shell drawing tool for Wayland. Renders a transparent fullscreen overlay 
 - Quick color switching (red, green, blue) and a color chooser popover
 - Adjustable line thickness via scroll wheel
 - Per-tool cursors that show the current color and stay sharp on HiDPI screens
+- Draws on every monitor at once; the toolbar follows the pointer to the screen you are on
 - Configurable keybindings
 
 ## Dependencies
