@@ -25,6 +25,7 @@ const COLOR_PRESETS: [(gtk::gdk::RGBA, &str); 4] = [
 enum ActionIcon {
     Undo,
     Clear,
+    PassThrough,
 }
 
 struct ToolButton {
@@ -54,6 +55,7 @@ pub struct Toolbar {
     preview_width: Rc<Cell<f64>>,
     undo_btn: gtk::Button,
     clear_btn: gtk::Button,
+    pass_through_btn: gtk::ToggleButton,
 }
 
 impl Default for Toolbar {
@@ -215,22 +217,53 @@ fn draw_action_icon(ctx: &cairo::Context, icon: ActionIcon, fg: &gtk::gdk::RGBA,
             ctx.line_to(0.56 * s, 0.70 * s);
             let _ = ctx.stroke();
         }
+        ActionIcon::PassThrough => {
+            // Mouse pointer: clicks go to the desktop underneath.
+            ctx.move_to(0.28 * s, 0.14 * s);
+            ctx.line_to(0.28 * s, 0.78 * s);
+            ctx.line_to(0.44 * s, 0.62 * s);
+            ctx.line_to(0.56 * s, 0.86 * s);
+            ctx.line_to(0.66 * s, 0.81 * s);
+            ctx.line_to(0.54 * s, 0.58 * s);
+            ctx.line_to(0.76 * s, 0.58 * s);
+            ctx.close_path();
+            let _ = ctx.stroke();
+        }
     }
 }
 
-fn make_action_button(icon: ActionIcon, tooltip: &str) -> gtk::Button {
+fn make_action_icon(icon: ActionIcon) -> gtk::DrawingArea {
     let area = gtk::DrawingArea::new();
     area.set_content_width(ICON_SIZE);
     area.set_content_height(ICON_SIZE);
     area.set_draw_func(move |area, ctx, w, h| {
         draw_action_icon(ctx, icon, &area.color(), w.min(h) as f64);
     });
+    area
+}
 
+fn make_action_button(icon: ActionIcon, tooltip: &str) -> gtk::Button {
+    let area = make_action_icon(icon);
     let btn = gtk::Button::new();
     btn.set_child(Some(&area));
     btn.add_css_class("toolbar-tool-btn");
     btn.set_tooltip_text(Some(tooltip));
     // The icon color follows hover state (see style.css), so repaint on state changes.
+    btn.connect_state_flags_changed(glib::clone!(
+        #[weak]
+        area,
+        move |_, _| area.queue_draw()
+    ));
+    btn
+}
+
+fn make_action_toggle(icon: ActionIcon, tooltip: &str) -> gtk::ToggleButton {
+    let area = make_action_icon(icon);
+    let btn = gtk::ToggleButton::new();
+    btn.set_child(Some(&area));
+    btn.add_css_class("toolbar-tool-btn");
+    btn.set_tooltip_text(Some(tooltip));
+    // The icon color follows hover and checked state (see style.css).
     btn.connect_state_flags_changed(glib::clone!(
         #[weak]
         area,
@@ -404,6 +437,14 @@ impl Toolbar {
         action_group.append(&clear_btn);
         container.append(&action_group);
 
+        let pass_through_btn = make_action_toggle(
+            ActionIcon::PassThrough,
+            "Use the desktop, keep the drawing (click again to draw)",
+        );
+        let mode_group = make_group();
+        mode_group.append(&pass_through_btn);
+        container.append(&mode_group);
+
         Toolbar {
             container,
             tool_buttons,
@@ -420,6 +461,7 @@ impl Toolbar {
             preview_width,
             undo_btn,
             clear_btn,
+            pass_through_btn,
         }
     }
 
@@ -484,6 +526,24 @@ impl Toolbar {
 
     pub fn connect_clear<F: Fn() + 'static>(&self, f: F) {
         self.clear_btn.connect_clicked(move |_| f());
+    }
+
+    /// Called with the new state when the pass-through toggle is clicked.
+    pub fn connect_pass_through<F: Fn(bool) + 'static>(&self, f: F) {
+        self.pass_through_btn
+            .connect_clicked(move |btn| f(btn.is_active()));
+    }
+
+    /// Shows the pass-through state without emitting the click handler.
+    pub fn set_pass_through(&self, on: bool) {
+        self.pass_through_btn.set_active(on);
+        if on {
+            self.color_popover.popdown();
+        }
+    }
+
+    pub fn pass_through(&self) -> bool {
+        self.pass_through_btn.is_active()
     }
 
     pub fn set_active_tool(&self, tool: CurrentDrawingTool) {

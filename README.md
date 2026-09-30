@@ -83,7 +83,11 @@ chicolli
 |---|---|
 | Draw | Left click and drag |
 | Change line thickness | Scroll wheel |
+| Use the desktop, keep the drawing | `d` or the pointer toggle at the end of the toolbar |
+| Back to drawing | Click the pointer toggle (or any tool) again, or run `chicolli` again |
 | Exit | Right click |
+
+In pass-through mode the drawing stays on screen and clicks and keys go to the windows underneath; only the toolbar still takes clicks, so you can switch back from it. Launching `chicolli` again returns the running overlay to drawing mode with the drawing intact instead of opening a second one (this needs a D-Bus session bus, which desktop sessions provide).
 
 ## Configuration
 
@@ -127,7 +131,7 @@ On first run, the config file is created automatically with default values. You 
 | `rectangle_keybind` | string | `"4"` | Key to switch to the rectangle tool. |
 | `text_keybind` | string | `"5"` | Key to switch to the text label tool. Click to place, type to enter text (tool keys type normally while editing), Shift+Enter for a new line, Ctrl+V to paste, Enter or Escape to finish. Click an existing label with this tool to drag it or keep typing. The text size follows the line thickness. |
 | `highlighter_keybind` | string | `"6"` | Key to switch to the highlighter tool. Draws semi-transparent strokes in the selected color, four times as wide as the line thickness. |
-| `disable_drawing` | string | `"d"` | Key to dismiss the overlay (releases keyboard and input). |
+| `disable_drawing` | string | `"d"` | Key to switch to pass-through: the drawing stays visible while clicks and keys reach the desktop. Click the toolbar's pointer toggle or run `chicolli` again to resume drawing. |
 | `color_r` | string | `"r"` | Key to switch color to red. |
 | `color_g` | string | `"g"` | Key to switch color to green. |
 | `color_b` | string | `"b"` | Key to switch color to blue. |
