@@ -25,6 +25,7 @@ const COLOR_PRESETS: [(gtk::gdk::RGBA, &str); 4] = [
 enum ActionIcon {
     Undo,
     Clear,
+    PassThrough,
 }
 
 struct ToolButton {
@@ -54,6 +55,7 @@ pub struct Toolbar {
     preview_width: Rc<Cell<f64>>,
     undo_btn: gtk::Button,
     clear_btn: gtk::Button,
+    pass_through_btn: gtk::Button,
 }
 
 impl Default for Toolbar {
@@ -213,6 +215,18 @@ fn draw_action_icon(ctx: &cairo::Context, icon: ActionIcon, fg: &gtk::gdk::RGBA,
             ctx.line_to(0.44 * s, 0.70 * s);
             ctx.move_to(0.56 * s, 0.42 * s);
             ctx.line_to(0.56 * s, 0.70 * s);
+            let _ = ctx.stroke();
+        }
+        ActionIcon::PassThrough => {
+            // Mouse pointer: clicks go to the desktop underneath.
+            ctx.move_to(0.28 * s, 0.14 * s);
+            ctx.line_to(0.28 * s, 0.78 * s);
+            ctx.line_to(0.44 * s, 0.62 * s);
+            ctx.line_to(0.56 * s, 0.86 * s);
+            ctx.line_to(0.66 * s, 0.81 * s);
+            ctx.line_to(0.54 * s, 0.58 * s);
+            ctx.line_to(0.76 * s, 0.58 * s);
+            ctx.close_path();
             let _ = ctx.stroke();
         }
     }
@@ -404,6 +418,14 @@ impl Toolbar {
         action_group.append(&clear_btn);
         container.append(&action_group);
 
+        let pass_through_btn = make_action_button(
+            ActionIcon::PassThrough,
+            "Use the desktop, keep the drawing (run chicolli again to return)",
+        );
+        let mode_group = make_group();
+        mode_group.append(&pass_through_btn);
+        container.append(&mode_group);
+
         Toolbar {
             container,
             tool_buttons,
@@ -420,6 +442,7 @@ impl Toolbar {
             preview_width,
             undo_btn,
             clear_btn,
+            pass_through_btn,
         }
     }
 
@@ -484,6 +507,10 @@ impl Toolbar {
 
     pub fn connect_clear<F: Fn() + 'static>(&self, f: F) {
         self.clear_btn.connect_clicked(move |_| f());
+    }
+
+    pub fn connect_pass_through<F: Fn() + 'static>(&self, f: F) {
+        self.pass_through_btn.connect_clicked(move |_| f());
     }
 
     pub fn set_active_tool(&self, tool: CurrentDrawingTool) {

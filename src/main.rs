@@ -2,7 +2,7 @@ use drawing::drawing_tool::DrawingTool;
 
 use gtk::glib::{self, Propagation};
 use gtk::{
-    cairo::Region,
+    cairo::{RectangleInt, Region},
     gdk::{Display, Key},
     prelude::*,
 };
@@ -74,21 +74,32 @@ fn constrain_active(elements: &Elements, shift: bool) {
     }
 }
 
+/// Switches between drawing and pass-through. In pass-through the drawing stays on screen
+/// while clicks and keys go to the windows underneath and the toolbar is hidden.
+fn set_pass_through(window: &gtk::ApplicationWindow, toolbar: &gtk::Box, on: bool) {
+    toolbar.set_visible(!on);
+    window.set_keyboard_mode(if on {
+        KeyboardMode::None
+    } else {
+        KeyboardMode::Exclusive
+    });
+    if let Some(surface) = window.surface() {
+        let region = if on {
+            Region::create()
+        } else {
+            Region::create_rectangle(&RectangleInt::new(0, 0, surface.width(), surface.height()))
+        };
+        surface.set_input_region(&region);
+    }
+    // Remap so the compositor picks up the new keyboard mode right away.
+    window.unmap();
+    window.map();
+}
+
 // https://github.com/wmww/gtk-layer-shell/blob/master/examples/simple-example.c
 fn activate(application: &gtk::Application) {
     // Create a normal GTK window however you like
     let window = gtk::ApplicationWindow::new(application);
-
-    application.connect_activate(glib::clone!(
-        #[weak]
-        window,
-        move |_| {
-            window.set_keyboard_mode(KeyboardMode::Exclusive);
-            if let Some(surface) = window.surface() {
-                surface.set_opaque_region(Some(&Region::create()));
-            }
-        },
-    ));
 
     let conf = Rc::new(config::get_config());
 
@@ -298,6 +309,34 @@ fn activate(application: &gtk::Application) {
         },
     ));
 
+    toolbar.borrow().connect_pass_through(glib::clone!(
+        #[weak]
+        window,
+        #[strong]
+        toolbar,
+        #[strong]
+        elements,
+        #[strong]
+        text_input_mode,
+        #[weak]
+        draw,
+        move || {
+            end_text_input(&elements, &text_input_mode);
+            draw.queue_draw();
+            set_pass_through(&window, toolbar.borrow().widget(), true);
+        },
+    ));
+
+    // Launching chicolli again (e.g. from the compositor shortcut) reaches this running
+    // instance and brings it back from pass-through, with the drawing intact.
+    application.connect_activate(glib::clone!(
+        #[weak]
+        window,
+        #[strong]
+        toolbar,
+        move |_| set_pass_through(&window, toolbar.borrow().widget(), false),
+    ));
+
     toolbar.borrow().connect_clear(glib::clone!(
         #[strong]
         elements,
@@ -464,12 +503,9 @@ fn activate(application: &gtk::Application) {
                     }
                 }
                 _ if _disable_drawing_key == keyval => {
-                    w.set_keyboard_mode(KeyboardMode::None);
-                    if let Some(surface) = w.surface() {
-                        surface.set_input_region(&Region::create());
-                    }
-                    w.unmap();
-                    w.map();
+                    end_text_input(&elements, &text_input_mode);
+                    draw.queue_draw();
+                    set_pass_through(&w, toolbar.borrow().widget(), true);
                 }
                 // colors
                 _ if _color_r == keyval => *color.borrow_mut() = colors::RED,
@@ -748,7 +784,10 @@ fn main() {
     let application = gtk::Application::new(Some("sh.wmww.gtk-layer-example"), Default::default());
 
     application.connect_activate(|app| {
-        activate(app);
+        // A second launch only re-activates the existing overlay (see `activate`).
+        if app.windows().is_empty() {
+            activate(app);
+        }
     });
 
     application.run();
