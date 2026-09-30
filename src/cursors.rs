@@ -2,14 +2,14 @@
 //!
 //! Every cursor shares one look: dark ink strokes inside a white halo with a faint dark
 //! rim, so it stays readable on light and dark backgrounds alike. The pen and highlighter
-//! show the current drawing color, and the arrow and rectangle cursors pair a precision
-//! crosshair with the same glyph as their toolbar button.
+//! show the current drawing color, the arrows are drawn in it from the click point, and
+//! the rectangle cursor pairs a precision crosshair with its toolbar glyph.
 //!
 //! Shapes are designed on a 32-unit grid and rendered at the device scale when GTK asks
 //! for it (the `hidpi-cursors` feature, GTK 4.16+), so they stay sharp on HiDPI outputs.
 
 use std::cell::Cell;
-use std::f64::consts::{FRAC_PI_4, PI};
+use std::f64::consts::{FRAC_PI_4, PI, SQRT_2};
 
 use gtk::cairo;
 use gtk::gdk;
@@ -18,7 +18,7 @@ use gtk::prelude::*;
 
 use crate::colors::Color;
 use crate::drawing::drawing_tool::CurrentDrawingTool;
-use crate::toolbar::{arrow_icon_path, rectangle_icon_path};
+use crate::toolbar::rectangle_icon_path;
 
 /// Side of the design grid every shape below is drawn on.
 const GRID: f64 = 32.0;
@@ -39,7 +39,7 @@ const WHITE: Color = Color::new(1.0, 1.0, 1.0, 1.0);
 enum Shape {
     Pen,
     Highlighter,
-    Arrow { pointing_right: bool },
+    Arrow { reverse: bool },
     Rectangle,
     Text,
 }
@@ -49,12 +49,8 @@ impl Shape {
         match tool {
             CurrentDrawingTool::NormalLine => Shape::Pen,
             CurrentDrawingTool::Highlighter => Shape::Highlighter,
-            CurrentDrawingTool::NormalArrowHeadPointer => Shape::Arrow {
-                pointing_right: true,
-            },
-            CurrentDrawingTool::NormalArrowHeadBase => Shape::Arrow {
-                pointing_right: false,
-            },
+            CurrentDrawingTool::NormalArrowHeadPointer => Shape::Arrow { reverse: false },
+            CurrentDrawingTool::NormalArrowHeadBase => Shape::Arrow { reverse: true },
             CurrentDrawingTool::NormalRectangle => Shape::Rectangle,
             CurrentDrawingTool::TextLabel => Shape::Text,
         }
@@ -68,7 +64,8 @@ impl Shape {
         match self {
             Shape::Pen => (4, 27),
             Shape::Highlighter => (5, 26),
-            Shape::Arrow { .. } | Shape::Rectangle => (12, 12),
+            Shape::Arrow { .. } => (6, 26),
+            Shape::Rectangle => (12, 12),
             Shape::Text => (15, 15),
         }
     }
@@ -81,13 +78,10 @@ impl Shape {
         match self {
             Shape::Pen => paint_pen(cr, x, y, color),
             Shape::Highlighter => paint_highlighter(cr, x, y, color),
-            Shape::Arrow { pointing_right } => {
-                paint_crosshair(cr, x, y);
-                paint_badge(cr, false, |cr, s| arrow_icon_path(cr, s, pointing_right));
-            }
+            Shape::Arrow { reverse } => paint_arrow(cr, x, y, color, reverse),
             Shape::Rectangle => {
                 paint_crosshair(cr, x, y);
-                paint_badge(cr, true, rectangle_icon_path);
+                paint_badge(cr, rectangle_icon_path);
             }
             Shape::Text => paint_ibeam(cr, x, y),
         }
@@ -120,15 +114,18 @@ fn inked(cr: &cairo::Context, width: f64, path: impl Fn(&cairo::Context)) {
     let _ = cr.stroke();
 }
 
+fn set_opaque(cr: &cairo::Context, color: &Color) {
+    cr.set_source_rgb(
+        f64::from(color.red()),
+        f64::from(color.green()),
+        f64::from(color.blue()),
+    );
+}
+
 /// Fills a closed `path` with `fill`, then outlines it in ink.
 fn fill_and_outline(cr: &cairo::Context, fill: &Color, path: impl Fn(&cairo::Context)) {
     path(cr);
-    cr.set_source_rgba(
-        f64::from(fill.red()),
-        f64::from(fill.green()),
-        f64::from(fill.blue()),
-        1.0,
-    );
+    set_opaque(cr, fill);
     let _ = cr.fill();
     path(cr);
     set_ink(cr);
@@ -212,6 +209,60 @@ fn paint_highlighter(cr: &cairo::Context, x: f64, y: f64, color: &Color) {
     cr.restore().ok();
 }
 
+/// Strokes `path` `width` wide in `color`, outlined in ink over the usual halo.
+fn colored_stroke(cr: &cairo::Context, color: &Color, width: f64, path: impl Fn(&cairo::Context)) {
+    let outlined = width + 2.0 * OUTLINE;
+    inked(cr, outlined, &path);
+    path(cr);
+    set_opaque(cr, color);
+    cr.set_line_width(width);
+    let _ = cr.stroke();
+}
+
+/// An arrow in the current color running up and to the right from the hotspot. Like the
+/// tool itself, the plain arrow starts at the click (marked with a dot) and the reverse
+/// arrow puts its head there.
+fn paint_arrow(cr: &cairo::Context, x: f64, y: f64, color: &Color, reverse: bool) {
+    const LENGTH: f64 = 24.0;
+    const HEAD_LENGTH: f64 = 9.0;
+    const HEAD_HALF_WIDTH: f64 = 5.0;
+    const SHAFT: f64 = 2.5;
+    const DOT: f64 = 2.5;
+    let u = (1.0 / SQRT_2, -1.0 / SQRT_2);
+    let at = |d: f64| (x + u.0 * d, y + u.1 * d);
+    // The head's tip, the way it points, and the shaft, which tucks into the head.
+    let (tip, dir, shaft) = if reverse {
+        (at(0.0), (-u.0, -u.1), (at(HEAD_LENGTH - 1.0), at(LENGTH)))
+    } else {
+        (at(LENGTH), u, (at(0.0), at(LENGTH - HEAD_LENGTH + 1.0)))
+    };
+    let head = |cr: &cairo::Context| {
+        let base = (tip.0 - dir.0 * HEAD_LENGTH, tip.1 - dir.1 * HEAD_LENGTH);
+        let side = (-dir.1 * HEAD_HALF_WIDTH, dir.0 * HEAD_HALF_WIDTH);
+        cr.move_to(tip.0, tip.1);
+        cr.line_to(base.0 + side.0, base.1 + side.1);
+        cr.line_to(base.0 - side.0, base.1 - side.1);
+        cr.close_path();
+    };
+    let dot = |cr: &cairo::Context| {
+        cr.new_sub_path();
+        cr.arc(x, y, DOT, 0.0, 2.0 * PI);
+    };
+
+    backdrop(cr, OUTLINE, head);
+    if !reverse {
+        backdrop(cr, OUTLINE, dot);
+    }
+    colored_stroke(cr, color, SHAFT, |cr| {
+        cr.move_to(shaft.0 .0, shaft.0 .1);
+        cr.line_to(shaft.1 .0, shaft.1 .1);
+    });
+    fill_and_outline(cr, color, head);
+    if !reverse {
+        fill_and_outline(cr, color, dot);
+    }
+}
+
 /// Thin crosshair with an open center, so the exact target pixel stays visible.
 fn paint_crosshair(cr: &cairo::Context, x: f64, y: f64) {
     const GAP: f64 = 4.0;
@@ -227,19 +278,17 @@ fn paint_crosshair(cr: &cairo::Context, x: f64, y: f64) {
     cr.set_line_cap(cairo::LineCap::Round);
 }
 
-/// The tool's toolbar glyph, small, below and right of the crosshair. A closed glyph is
-/// filled white so its small inside stays clean instead of showing a blurred halo.
-fn paint_badge(cr: &cairo::Context, closed: bool, glyph: impl Fn(&cairo::Context, f64)) {
+/// The tool's toolbar glyph, small, below and right of the crosshair. The glyph is closed,
+/// and filled white so its small inside stays clean instead of showing a blurred halo.
+fn paint_badge(cr: &cairo::Context, glyph: impl Fn(&cairo::Context, f64)) {
     const ORIGIN: f64 = 15.0;
     const SIZE: f64 = 16.0;
     cr.save().ok();
     cr.translate(ORIGIN, ORIGIN);
     backdrop(cr, 2.0, |cr| glyph(cr, SIZE));
-    if closed {
-        glyph(cr, SIZE);
-        cr.set_source_rgb(1.0, 1.0, 1.0);
-        let _ = cr.fill();
-    }
+    glyph(cr, SIZE);
+    cr.set_source_rgb(1.0, 1.0, 1.0);
+    let _ = cr.fill();
     glyph(cr, SIZE);
     set_ink(cr);
     cr.set_line_width(2.0);
@@ -395,12 +444,8 @@ mod tests {
     const SHAPES: [Shape; 6] = [
         Shape::Pen,
         Shape::Highlighter,
-        Shape::Arrow {
-            pointing_right: true,
-        },
-        Shape::Arrow {
-            pointing_right: false,
-        },
+        Shape::Arrow { reverse: false },
+        Shape::Arrow { reverse: true },
         Shape::Rectangle,
         Shape::Text,
     ];
@@ -443,8 +488,13 @@ mod tests {
     }
 
     #[test]
-    fn pen_and_highlighter_tips_cover_the_hotspot() {
-        for shape in [Shape::Pen, Shape::Highlighter] {
+    fn pointed_shapes_cover_the_hotspot() {
+        for shape in [
+            Shape::Pen,
+            Shape::Highlighter,
+            Shape::Arrow { reverse: false },
+            Shape::Arrow { reverse: true },
+        ] {
             for scale in [1.0, 2.0] {
                 let mut image = render(shape, &Color::BLUE, 32, scale).unwrap();
                 let (hx, hy) = image.hotspot;

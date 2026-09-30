@@ -91,7 +91,7 @@ fn draw_color_dot(ctx: &cairo::Context, c: &gtk::gdk::RGBA, w: f64, h: f64) {
 
 /// Adds the arrow icon's path (shaft plus open head) in an `s`-sized box; the tool
 /// cursors reuse it for their badge so both show the same glyph.
-pub(crate) fn arrow_icon_path(ctx: &cairo::Context, s: f64, pointing_right: bool) {
+fn arrow_icon_path(ctx: &cairo::Context, s: f64, pointing_right: bool) {
     let (tail, head) = if pointing_right {
         (0.18 * s, 0.82 * s)
     } else {
