@@ -18,7 +18,9 @@ Then build and install:
 cargo install --path .
 ```
 
-On GTK older than 4.16 (e.g. Ubuntu 24.04) add `--no-default-features`; the cursors are then drawn at 1x instead of your screen's scale. GTK 4.20 draws such scaled cursors far too large on scaled monitors, so there Chicolli uses the 1x cursors too; GTK 4.22 fixes that.
+On GTK older than 4.16 (e.g. Ubuntu 24.04) add `--no-default-features`; the cursors are then drawn at 1x instead of your screen's scale.
+
+On GTK 4.20 (4.19.0 to 4.21.2) Chicolli also uses the 1x cursors, because those versions draw scaled cursors far too large on scaled monitors. That keeps the cursor the same size on every monitor, though it looks a bit soft on HiDPI screens. Once you update to GTK 4.22 or newer, the sharp scaled cursors come back on their own, with no rebuild needed.
 
 Bind `chicolli` to a key in your compositor, for example:
 
