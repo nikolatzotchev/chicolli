@@ -323,8 +323,24 @@ fn logical_size(theme_size: i32) -> i32 {
     (theme_size.max(16) * 4 + 2) / 3
 }
 
+/// GTK 4.19.0 to 4.21.2 (so all of 4.20) size callback cursors wrongly on Wayland: on
+/// an output scaled by `s` they show `s * s` times too large (GTK issue 7888, fixed in
+/// 4.21.3). Those versions get the plain 1x texture cursor, which is the right size
+/// everywhere, just not as sharp on HiDPI outputs.
+#[cfg(feature = "hidpi-cursors")]
+fn callback_cursors_sized_right(major: u32, minor: u32, micro: u32) -> bool {
+    major != 4 || !(19..=21).contains(&minor) || (minor == 21 && micro >= 3)
+}
+
 #[cfg(feature = "hidpi-cursors")]
 fn cursor_for(tool: CurrentDrawingTool, color: Color) -> Option<gdk::Cursor> {
+    if !callback_cursors_sized_right(
+        gtk::major_version(),
+        gtk::minor_version(),
+        gtk::micro_version(),
+    ) {
+        return texture_cursor(tool, color);
+    }
     let shape = Shape::for_tool(tool);
     let fallback = gdk::Cursor::from_name("crosshair", None);
     gdk::Cursor::from_callback(
@@ -355,11 +371,16 @@ fn cursor_for(tool: CurrentDrawingTool, color: Color) -> Option<gdk::Cursor> {
     )
 }
 
-#[cfg(not(feature = "hidpi-cursors"))]
-fn cursor_for(tool: CurrentDrawingTool, color: Color) -> Option<gdk::Cursor> {
+/// A cursor from a fixed 32px texture, shown at 1x on every output.
+fn texture_cursor(tool: CurrentDrawingTool, color: Color) -> Option<gdk::Cursor> {
     let image = render(Shape::for_tool(tool), &color, DEFAULT_SIZE, 1.0)?;
     let (hx, hy) = image.hotspot;
     Some(gdk::Cursor::from_texture(&texture(image)?, hx, hy, None))
+}
+
+#[cfg(not(feature = "hidpi-cursors"))]
+fn cursor_for(tool: CurrentDrawingTool, color: Color) -> Option<gdk::Cursor> {
+    texture_cursor(tool, color)
 }
 
 /// Keeps a widget's cursor matched to the current tool and color.
@@ -454,6 +475,28 @@ mod tests {
                     "{shape:?} @{scale}"
                 );
             }
+        }
+    }
+
+    #[cfg(feature = "hidpi-cursors")]
+    #[test]
+    fn giant_cursor_gtk_versions_fall_back_to_textures() {
+        for (version, right) in [
+            ((4, 16, 12), true),
+            ((4, 18, 6), true),
+            ((4, 19, 0), false),
+            ((4, 20, 4), false),
+            ((4, 21, 2), false),
+            ((4, 21, 3), true),
+            ((4, 22, 0), true),
+            ((4, 24, 0), true),
+        ] {
+            let (major, minor, micro) = version;
+            assert_eq!(
+                callback_cursors_sized_right(major, minor, micro),
+                right,
+                "{version:?}"
+            );
         }
     }
 
