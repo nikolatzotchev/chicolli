@@ -1,4 +1,4 @@
-use drawing::drawing_tool::{CurrentDrawingTool, DrawingTool};
+use drawing::drawing_tool::{CurrentDrawingTool, DrawingTool, Point};
 
 use gtk::gio;
 use gtk::glib::{self, Propagation};
@@ -22,7 +22,9 @@ pub mod geometry;
 pub mod keybinds;
 pub mod toolbar;
 
-/// A drawn element and the canvas (monitor) it was drawn on.
+/// A drawn element and the canvas (monitor) it was started on. Elements are kept in
+/// global layout coordinates, so a stroke dragged across a monitor edge carries on onto
+/// the next monitor, whatever their resolutions and scales.
 struct Element {
     canvas: u32,
     tool: Box<dyn DrawingTool>,
@@ -68,6 +70,12 @@ fn shift_after_key_event(keyval: Key, modifier: gtk::gdk::ModifierType, pressed:
         Key::Shift_L | Key::Shift_R => pressed,
         _ => modifier.contains(gtk::gdk::ModifierType::SHIFT_MASK),
     }
+}
+
+/// Where `monitor`'s overlay sits in the global (logical pixel) layout.
+fn origin(monitor: &Monitor) -> Point {
+    let geometry = monitor.geometry();
+    Point(f64::from(geometry.x()), f64::from(geometry.y()))
 }
 
 fn display() -> Display {
@@ -327,6 +335,7 @@ impl State {
 
     /// Opens a fullscreen overlay on `monitor`.
     fn add_canvas(&self, monitor: &Monitor) {
+        let monitor = monitor.clone();
         let id = self.next_canvas_id.get();
         self.next_canvas_id.set(id + 1);
 
@@ -335,7 +344,7 @@ impl State {
 
         // Before the window is first realized, set it up to be a layer surface
         window.init_layer_shell();
-        window.set_monitor(Some(monitor));
+        window.set_monitor(Some(&monitor));
         let pass_through = self.toolbar.pass_through();
         window.set_keyboard_mode(if pass_through {
             KeyboardMode::None
@@ -397,8 +406,8 @@ impl State {
             },
         ));
         motion_controller.connect_motion(glib::clone!(
-            #[weak]
-            draw,
+            #[strong]
+            monitor,
             #[strong(rename_to = state)]
             self,
             move |ctrl, x, y| {
@@ -408,17 +417,18 @@ impl State {
                     .current_event_state()
                     .contains(gtk::gdk::ModifierType::SHIFT_MASK);
                 *state.shift_held.borrow_mut() = shift;
-                if let Some(elem) = state.elements.borrow_mut().last_mut() {
-                    if elem.canvas != id {
-                        return;
-                    }
+                // While a button is held the pressed overlay keeps getting the motion,
+                // also past its monitor's edge, so the element follows the pointer
+                // onto the other monitors.
+                let active = state.elements.borrow_mut().last_mut().is_some_and(|elem| {
                     if elem.tool.active() {
                         elem.tool.set_constrained(shift);
                     }
-                    elem.tool.motion_notify(drawing::drawing_tool::Point(x, y));
-                    if elem.tool.active() {
-                        draw.queue_draw();
-                    }
+                    elem.tool.motion_notify(origin(&monitor) + Point(x, y));
+                    elem.tool.active()
+                });
+                if active {
+                    state.redraw();
                 }
             },
         ));
@@ -448,27 +458,34 @@ impl State {
             self,
             #[weak]
             draw,
-            move |gesture, _, x, y| state.press(id, &draw, gesture, x, y),
+            #[strong]
+            monitor,
+            move |gesture, _, x, y| {
+                state.press(id, &draw, gesture, origin(&monitor) + Point(x, y))
+            },
         ));
 
         left_click_mouse.connect_released(glib::clone!(
             #[strong(rename_to = state)]
             self,
-            #[weak]
-            draw,
+            #[strong]
+            monitor,
             move |_, _, x, y| {
-                let mut elems = state.elements.borrow_mut();
-                if let Some(elem) = elems.last_mut() {
-                    if elem.canvas != id || !elem.tool.active() {
+                {
+                    let mut elems = state.elements.borrow_mut();
+                    let Some(elem) = elems.last_mut() else {
+                        return;
+                    };
+                    if !elem.tool.active() {
                         return;
                     }
-                    elem.tool.release_mouse(drawing::drawing_tool::Point(x, y));
+                    elem.tool.release_mouse(origin(&monitor) + Point(x, y));
                     // A click that drew nothing (e.g. an arrow without a drag) is dropped.
                     if !elem.tool.active() && elem.tool.is_empty() {
                         elems.pop();
                     }
                 }
-                draw.queue_draw();
+                state.redraw();
             },
         ));
 
@@ -506,8 +523,12 @@ impl State {
         draw.set_draw_func(glib::clone!(
             #[weak(rename_to = elements)]
             self.elements,
+            #[strong]
+            monitor,
             move |_, ctx, _, _| {
-                for element in elements.borrow().iter().filter(|e| e.canvas == id) {
+                let Point(x, y) = origin(&monitor);
+                ctx.translate(-x, -y);
+                for element in elements.borrow().iter() {
                     element.tool.draw(ctx);
                 }
             },
@@ -528,7 +549,7 @@ impl State {
 
         self.canvases.borrow_mut().push(Canvas {
             id,
-            monitor: monitor.clone(),
+            monitor,
             window,
             overlay,
             draw,
@@ -536,22 +557,20 @@ impl State {
         });
     }
 
-    /// Starts a new element, or picks up a text label, where canvas `id` was clicked.
-    fn press(&self, id: u32, draw: &gtk::DrawingArea, gesture: &gtk::GestureClick, x: f64, y: f64) {
+    /// Starts a new element, or picks up a text label, where canvas `id` was clicked at
+    /// `point` (in global layout coordinates).
+    fn press(&self, id: u32, draw: &gtk::DrawingArea, gesture: &gtk::GestureClick, point: Point) {
         // Clicking somewhere else ends typing into the previous label.
         self.end_text_input();
-        let point = drawing::drawing_tool::Point(x, y);
         let current_tool = *self.current_tool.borrow();
         if current_tool == CurrentDrawingTool::TextLabel {
             // Clicking an existing label picks it up: drag to move it, type to extend it.
             let mut elems = self.elements.borrow_mut();
             let hit = elems.iter_mut().rposition(|elem| {
-                elem.canvas == id
-                    && elem
-                        .tool
-                        .as_any_mut()
-                        .downcast_mut::<drawing::text_label::TextLabel>()
-                        .is_some_and(|label| label.contains(point))
+                elem.tool
+                    .as_any_mut()
+                    .downcast_mut::<drawing::text_label::TextLabel>()
+                    .is_some_and(|label| label.contains(point))
             });
             if let Some(index) = hit {
                 // Move it to the end: the last element is the one being edited.
@@ -566,7 +585,7 @@ impl State {
                 elems.push(elem);
                 *self.text_input_mode.borrow_mut() = true;
                 draw.grab_focus();
-                draw.queue_draw();
+                self.redraw();
                 return;
             }
         }
@@ -601,7 +620,7 @@ impl State {
             canvas: id,
             tool: drawing_tool,
         });
-        draw.queue_draw();
+        self.redraw();
     }
 
     fn key_pressed(&self, keyval: Key, modifier: gtk::gdk::ModifierType) -> Propagation {
