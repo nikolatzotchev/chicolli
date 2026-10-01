@@ -110,6 +110,14 @@ pub fn get_cursors_config_loc() -> Option<std::path::PathBuf> {
     }
 }
 
+/// Path of the config file, `~/.config/chicolli/chicolli.json`; it may not exist yet.
+pub fn config_file_path() -> Option<std::path::PathBuf> {
+    let mut path = config_dir()?;
+    path.push(CONFIG_DIR);
+    path.push(CONFIG_NAME);
+    Some(path)
+}
+
 pub fn read_config() -> Result<Configuration, Error> {
     // get the config dir path
     let conf_path = config_dir();
@@ -139,7 +147,8 @@ pub fn read_config() -> Result<Configuration, Error> {
     }
 }
 
-fn read_config_file(file_path: &std::path::Path) -> Result<Configuration, Error> {
+/// Reads and parses a config file, filling options it leaves out with the defaults.
+pub fn read_config_file(file_path: &std::path::Path) -> Result<Configuration, Error> {
     let mut file = File::open(file_path)?;
 
     // Read the content of the file into a string
