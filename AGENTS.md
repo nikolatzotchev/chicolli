@@ -18,12 +18,12 @@ On Nix/NixOS, use the checked-in `shell.nix`. It provides `rustc`, `cargo`, `std
 ## Dependencies
 
 - Rust 2021 edition
-- GTK4 (`gtk4` crate v0.10, feature `v4_10`; the default `hidpi-cursors` Cargo feature enables `v4_16`)
-- `gio` v0.21
-- `gtk4-layer-shell` v0.7.1 (Wayland layer shell integration)
+- GTK4 (`gtk4` crate v0.11, feature `v4_10`; the default `hidpi-cursors` Cargo feature enables `v4_16`)
+- `gio` v0.22
+- `gtk4-layer-shell` v0.8.1 (Wayland layer shell integration)
 - `serde` / `serde_json` (JSON config)
-- `dirs` v6.0 (XDG config directory)
-- `pangocairo` v0.21.5 (text rendering)
+- `dirs` v7.0 (XDG config directory)
+- `pangocairo` v0.22.9 (text rendering)
 - System packages: `gtk4`, `gtk4-layer-shell`, `wayland` libs, `pkg-config`, and a C compiler/linker (`cc`, `gcc`, or `clang`)
 
 ## Architecture
@@ -55,7 +55,7 @@ shell.nix                # Nix development shell with native build dependencies
 - **DrawingTool trait** (`src/drawing/drawing_tool.rs`): All tools implement `DrawingTool` with `press_mouse`, `release_mouse`, `motion_notify`, `draw`, `set_line_width`, `set_color`, `active`, `as_any_mut`, and optional `set_constrained` and `is_empty` (elements that would draw nothing are dropped on release so Undo never removes something invisible). Shared Cairo helpers (`set_source_color`, which honors the color's alpha, `stroke_smooth_path`, `stroke_relaxed_path`) live next to the trait.
 - **State management**: Uses `Rc<RefCell<T>>` for shared mutable state across GTK closures.
 - **Config**: JSON config at `~/.config/chicolli/chicolli.json`: `line_width` plus a `keys` group (`pen`, `undo`, ...; values are GTK key names with optional `<Ctrl>`/`<Shift>`/`<Alt>`/`<Super>` prefixes). Created as `{"keys": {}}` if missing; `config::parse_config` fills missing options from `Configuration::default()`, still accepts the old flat names (`draw_keybind`, `line_thickness`, `undo` implying Ctrl, ...) and reports unknown options. Keybinds are resolved to `keybinds::Binding`s (key plus exact Ctrl/Alt/Super modifiers) once per load (`src/keybinds.rs`); `State::watch_config` in `main.rs` reloads the file with a `gio::FileMonitor` when it is saved (in place or by rename), keeping the old config if the new one fails to parse.
-- **Cursors**: Tool cursors are drawn at runtime in `src/cursors.rs` with Cairo on a 32-unit grid: dark ink, white halo, faint dark rim. Pen and highlighter show the current color; arrow and rectangle pair a crosshair with the toolbar glyph (`arrow_icon_path` / `rectangle_icon_path` are shared with `toolbar.rs`). Each shape's working point sits exactly on its hotspot. Call `ToolCursor::show(tool, color)` wherever the tool or color changes. With `hidpi-cursors` (GTK 4.16+) they use `gdk::Cursor::from_callback` to render at the output scale and follow the theme cursor size; without it, a 32px `MemoryTexture`. The `cursors/` PNGs are old bundled assets the app no longer uses.
+- **Cursors**: Tool cursors are drawn at runtime in `src/cursors.rs` with Cairo on a 32-unit grid: dark ink, white halo, faint dark rim. Pen and highlighter show the current color; arrow and rectangle pair a crosshair with the toolbar glyph (`arrow_icon_path` / `rectangle_icon_path` are shared with `toolbar.rs`). Each shape's working point sits exactly on its hotspot. Call `ToolCursor::show(tool, color)` wherever the tool or color changes. With `hidpi-cursors` (GTK 4.16+) they use `gdk::Cursor::from_callback` (needs gdk4 0.11+; 0.10 freed the texture before GTK read it) to render at the output scale and follow the theme cursor size; without it, a 32px `MemoryTexture`. The `cursors/` PNGs are old bundled assets the app no longer uses.
 - **Toolbar**: `src/toolbar.rs` owns tool toggles, color presets/chooser swatch, line-width buttons, and undo/clear buttons. Keep toolbar state synchronized with keyboard shortcuts and mouse-wheel changes via `Toolbar::update`.
 - **Constrained drawing**: `DrawingTool::set_constrained` is used for Shift-modified snapping. `snap_angle`, `snap_square`, the spline solver `spline_controls` and `arrow_head` live in `src/geometry.rs` (GTK-free, unit-tested in `tests/geometry_tests.rs`) and are re-exported where needed.
 - **Layer behavior**: Every monitor gets its own fullscreen overlay window (a `Canvas` in `main.rs`), kept in step with monitor hotplug by `State::sync_monitors`; the windows share one `State` (tool, color, width, elements tagged with their canvas id, so Undo removes the latest element on any monitor). There is one toolbar, and it moves to the overlay the pointer enters. The windows use layer-shell overlay mode and exclusive keyboard mode. The color chooser is a popover on the toolbar swatch (a popup of the overlay, so tiling compositors never tile it); the key handler passes keys through while it is open. Pass-through (`disable_drawing` key or the toolbar's pass-through toggle) shrinks the input region to the toolbar and sets `KeyboardMode::None` via `State::set_pass_through` in `main.rs` (overlays without the toolbar take no input); a second launch re-activates the running instance (GApplication uniqueness) and restores drawing mode.
