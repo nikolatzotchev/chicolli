@@ -1,118 +1,55 @@
 # Chicolli
 
-A GTK4 shell drawing tool for Wayland. Renders a transparent fullscreen overlay using [gtk4-layer-shell](https://github.com/wmww/gtk4-layer-shell) and allows freehand drawing, arrows, and rectangles on top of the desktop.
+Draw on top of your Wayland desktop. Chicolli opens a transparent overlay on every monitor (via [gtk4-layer-shell](https://github.com/wmww/gtk4-layer-shell)) with a pen, arrows, rectangles, a highlighter and text labels.
 
-## Features
+## Install
 
-- Freehand drawing with B-spline interpolation
-- Arrows (with reversible direction)
-- Rectangles
-- Text labels (click to place, type to annotate, Shift+Enter for a new line, Ctrl+V to paste; click a label again to move or extend it)
-- Highlighter (semi-transparent freehand drawing in the selected color, four times the line width)
-- Quick color switching (red, green, blue) and a color chooser popover
-- Adjustable line thickness via scroll wheel
-- Per-tool cursors that show the current color and stay sharp on HiDPI screens
-- Draws on every monitor at once; the toolbar follows the pointer to the screen you are on
-- Configurable keybindings
-
-## Dependencies
-
-- GTK4 (4.16 or newer; see below for older versions)
-- gtk4-layer-shell
-- Wayland compositor
-- pkg-config
-
-### Fedora
+You need GTK 4, gtk4-layer-shell, Wayland and pkg-config:
 
 ```sh
-sudo dnf install gtk4-devel gtk4-layer-shell-devel wayland-devel pkg-config
+sudo dnf install gtk4-devel gtk4-layer-shell-devel wayland-devel pkg-config  # Fedora
+sudo pacman -S gtk4 gtk4-layer-shell wayland pkg-config                      # Arch
+nix-shell                                                                    # Nix: then build inside the shell
 ```
 
-### Arch Linux
-
-```sh
-sudo pacman -S gtk4 gtk4-layer-shell wayland pkg-config
-```
-
-### Nix / NixOS
-
-```sh
-nix-shell --run "cargo build"
-```
-
-Or enter the shell first:
-
-```sh
-nix-shell
-cargo build
-```
-
-## Building
-
-```sh
-cargo build --release
-```
-
-The default `hidpi-cursors` feature renders the tool cursors at your output's scale and needs GTK 4.16 or newer. On older GTK (for example Ubuntu 24.04, which ships 4.14), build without it; the cursors are then drawn at 1x and scaled by the compositor:
-
-```sh
-cargo build --release --no-default-features
-```
-
-## Installation
-
-After building, copy the binary to a directory in your `$PATH`:
-
-```sh
-sudo cp target/release/chicolli /usr/local/bin/chicolli
-```
-
-Or install it directly with Cargo:
+Then build and install:
 
 ```sh
 cargo install --path .
 ```
 
-Optionally, copy the bundled cursors to the config directory:
+On GTK older than 4.16 (e.g. Ubuntu 24.04) add `--no-default-features`; the cursors are then drawn at 1x instead of your screen's scale.
 
-```sh
-mkdir -p ~/.config/chicolli/cursors
-cp cursors/*.png ~/.config/chicolli/cursors/
-```
+Bind `chicolli` to a key in your compositor, for example:
 
-## Usage
+- Sway: `bindsym $mod+d exec chicolli`
+- Hyprland: `bind = SUPER, D, exec, chicolli`
+- Wayfire, under `[command]`: `binding_chicolli = <super> KEY_D` and `command_chicolli = chicolli`
 
-```sh
-chicolli
-```
+## Use
 
-| Action | Input |
+Draw with the left mouse button, pick tools and colors from the toolbar or the keys below, and right click to exit. Hold Shift to snap arrows to 45° steps and rectangles to squares.
+
+| Key | Action |
 |---|---|
-| Draw | Left click and drag |
-| Change line thickness | Scroll wheel |
-| Use the desktop, keep the drawing | `d` or the pointer toggle at the end of the toolbar |
-| Back to drawing | Click the pointer toggle (or any tool) again, or run `chicolli` again |
-| Exit | Right click |
+| `1` `2` `3` | Pen, arrow, reversed arrow |
+| `4` `5` `6` | Rectangle, text, highlighter |
+| `r` `g` `b` `c` | Red, green, blue, color chooser |
+| Scroll wheel | Line width |
+| `Ctrl+z` / `Ctrl+x` | Undo / clear |
+| `d` | Pass-through: keep the drawing, use the desktop |
 
-In pass-through mode the drawing stays on screen and clicks and keys go to the windows underneath; only the toolbar still takes clicks, so you can switch back from it. Launching `chicolli` again returns the running overlay to drawing mode with the drawing intact instead of opening a second one (this needs a D-Bus session bus, which desktop sessions provide).
+With the text tool, click to place a label, type, Shift+Enter for a new line, Ctrl+V to paste, and Enter or Escape to finish. Click a label again to move it or keep typing.
 
-## Configuration
+In pass-through mode only the toolbar takes clicks. Click its pointer toggle (or any tool), or run `chicolli` again, to get back to drawing with everything still there.
 
-Chicolli uses a JSON config file located at:
+## Configure
 
-```
-~/.config/chicolli/chicolli.json
-```
-
-On first run, the config file is created automatically with default values. You only need to specify the options you want to change — any missing fields fall back to their defaults.
-
-Changes to the file apply while Chicolli is running, no restart needed. Keybinds follow every save; `line_thickness` changes the current width only when that value itself is edited. A save that is not valid JSON is reported on stderr and the previous settings stay in effect.
-
-### Default configuration
+Settings live in `~/.config/chicolli/chicolli.json`, created on first run. Every option is optional, and changes apply as soon as you save:
 
 ```json
 {
-  "line_thickness": 2.0,
+  "line_thickness": 5.0,
   "draw_keybind": "1",
   "arrow_keybind": "2",
   "reverse_arrow_keybind": "3",
@@ -129,72 +66,7 @@ Changes to the file apply while Chicolli is running, no restart needed. Keybinds
 }
 ```
 
-### Options
-
-| Option | Type | Default | Description |
-|---|---|---|---|
-| `line_thickness` | float | `2.0` | Initial stroke width in pixels. Can be adjusted at runtime with the scroll wheel or the toolbar; editing it in the file sets the current width. |
-| `draw_keybind` | string | `"1"` | Key to switch to the freehand drawing tool. |
-| `arrow_keybind` | string | `"2"` | Key to switch to the arrow tool (arrowhead at pointer end). |
-| `reverse_arrow_keybind` | string | `"3"` | Key to switch to the reverse arrow tool (arrowhead at start). |
-| `rectangle_keybind` | string | `"4"` | Key to switch to the rectangle tool. |
-| `text_keybind` | string | `"5"` | Key to switch to the text label tool. Click to place, type to enter text (tool keys type normally while editing), Shift+Enter for a new line, Ctrl+V to paste, Enter or Escape to finish. Click an existing label with this tool to drag it or keep typing. The text size follows the line thickness. |
-| `highlighter_keybind` | string | `"6"` | Key to switch to the highlighter tool. Draws semi-transparent strokes in the selected color, four times as wide as the line thickness. |
-| `disable_drawing` | string | `"d"` | Key to switch to pass-through: the drawing stays visible while clicks and keys reach the desktop. Click the toolbar's pointer toggle or run `chicolli` again to resume drawing. |
-| `color_r` | string | `"r"` | Key to switch color to red. |
-| `color_g` | string | `"g"` | Key to switch color to green. |
-| `color_b` | string | `"b"` | Key to switch color to blue. |
-| `color_chooser` | string | `"c"` | Key to open the color chooser popover. |
-| `undo` | string | `"z"` | Key (with Ctrl) to undo the last drawn element. |
-| `clear_all` | string | `"x"` | Key (with Ctrl) to clear all drawn elements. |
-
-Keybind values are GTK key names (e.g. `"1"`, `"a"`, `"F1"`, `"space"`). An unknown name is reported on stderr and leaves that action unbound.
-
-### Custom cursors
-
-Place PNG images in `~/.config/chicolli/cursors/` to use custom cursors for each tool:
-
-| Filename | Tool |
-|---|---|
-| `pencil.png` | Freehand drawing |
-| `arrow.png` | Arrow |
-| `rectangle.png` | Rectangle |
-| `text.png` | Text label |
-| `highlighter.png` | Highlighter |
-
-The images are scaled to 30×30 pixels. Default bundled cursors are included in the `cursors/` directory of the repository and can be copied to the config location.
-
-## Compositor shortcut
-
-Since chicolli is a Wayland overlay, you typically launch it with a keyboard shortcut in your compositor.
-
-### Wayfire
-
-Add the following to `~/.config/wayfire.ini` under the `[command]` section:
-
-```ini
-[command]
-binding_chicolli = <super> KEY_D
-command_chicolli = chicolli
-```
-
-Replace `<super> KEY_D` with your preferred key combination. Wayfire key names use the Linux input event codes (e.g. `KEY_A`, `KEY_F1`, `KEY_SPACE`).
-
-### Sway
-
-Add to `~/.config/sway/config`:
-
-```
-bindsym $mod+d exec chicolli
-```
-
-### Hyprland
-
-Add to `~/.config/hypr/hyprland.conf`:
-
-```
-bind = SUPER, D, exec, chicolli
-```
+Keys are GTK key names such as `"a"`, `"F1"` or `"space"`; `undo` and `clear_all` are pressed with Ctrl. Unknown key names, unknown options and files that are not valid JSON are reported on stderr, and a broken file keeps the previous settings.
 
 ## License
 

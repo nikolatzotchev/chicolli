@@ -70,15 +70,8 @@ impl Configuration {
     }
 }
 
-pub const PENCIL_CUR: &str = "pencil";
-pub const ARROW_CUR: &str = "arrow";
-pub const SQUARE_CUR: &str = "rectangle";
-pub const TEXT_CUR: &str = "text";
-pub const HIGHLIGHTER_CUR: &str = "highlighter";
-
 const CONFIG_NAME: &str = "chicolli.json";
 const CONFIG_DIR: &str = "chicolli";
-const CONFIG_CURSORS_DIR: &str = "cursors";
 
 fn write_default_config(path: &std::path::Path) {
     let mut file = std::fs::File::create(path).unwrap();
@@ -95,18 +88,6 @@ pub fn get_config() -> Configuration {
             );
             Configuration::default()
         }
-    }
-}
-
-pub fn get_cursors_config_loc() -> Option<std::path::PathBuf> {
-    let conf_path = config_dir();
-    match conf_path {
-        Some(mut conf_path) => {
-            conf_path.push(CONFIG_DIR);
-            conf_path.push(CONFIG_CURSORS_DIR);
-            Some(conf_path)
-        }
-        None => None,
     }
 }
 
@@ -143,7 +124,7 @@ pub fn read_config() -> Result<Configuration, Error> {
                 read_config()
             }
         }
-        None => Err(Error::other("counld not find defaul config directory")),
+        None => Err(Error::other("could not find the config directory")),
     }
 }
 
@@ -157,8 +138,31 @@ pub fn read_config_file(file_path: &std::path::Path) -> Result<Configuration, Er
 
     // Deserialize the JSON content into the Configuration struct
     let config = serde_json::from_str::<Configuration>(&content)?;
+    for option in unknown_options(&content) {
+        eprintln!(
+            "chicolli: ignoring unknown option {option:?} in {}",
+            file_path.display()
+        );
+    }
 
     Ok(config.merge(Configuration::default()))
+}
+
+/// Top-level keys of a config file that are not options, such as misspelled ones,
+/// which serde would otherwise drop without a word.
+pub fn unknown_options(content: &str) -> Vec<String> {
+    let Ok(serde_json::Value::Object(given)) = serde_json::from_str(content) else {
+        return Vec::new();
+    };
+    let Ok(serde_json::Value::Object(known)) = serde_json::to_value(Configuration::default())
+    else {
+        return Vec::new();
+    };
+    given
+        .keys()
+        .filter(|key| !known.contains_key(*key))
+        .cloned()
+        .collect()
 }
 
 #[cfg(test)]

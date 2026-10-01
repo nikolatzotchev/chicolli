@@ -37,3 +37,13 @@ fn merge_prefers_present_values_and_falls_back_to_defaults_source() {
     assert_eq!(merged.color_chooser, Some("c".to_string()));
     assert_eq!(merged.clear_all, Some("x".to_string()));
 }
+
+#[test]
+fn unknown_options_names_misspelled_keys_only() {
+    let content = r#"{ "line_thickness": 3.0, "undo_keybind": "u", "draw_keybind": "q" }"#;
+    assert_eq!(
+        chicolli::config::unknown_options(content),
+        vec!["undo_keybind".to_string()]
+    );
+    assert!(chicolli::config::unknown_options("not json").is_empty());
+}
