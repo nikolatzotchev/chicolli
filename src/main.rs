@@ -252,7 +252,7 @@ impl State {
                         None => Region::create(),
                     }
                 };
-                surface.set_input_region(&region);
+                surface.set_input_region(Some(&region));
             }
             // Remap so the compositor picks up the new keyboard mode right away.
             window.unmap();
@@ -522,7 +522,7 @@ impl State {
         if pass_through {
             // A monitor plugged in during pass-through must not catch clicks.
             if let Some(surface) = window.surface() {
-                surface.set_input_region(&Region::create());
+                surface.set_input_region(Some(&Region::create()));
             }
         }
 
