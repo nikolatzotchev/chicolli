@@ -327,8 +327,8 @@ fn logical_size(theme_size: i32) -> i32 {
 fn cursor_for(tool: CurrentDrawingTool, color: Color) -> Option<gdk::Cursor> {
     let shape = Shape::for_tool(tool);
     let fallback = gdk::Cursor::from_name("crosshair", None);
-    gdk::Cursor::from_callback(
-        move |_, theme_size, scale, width, height, hotspot_x, hotspot_y| {
+    cursor_from_callback(
+        move |theme_size, scale, width, height, hotspot_x, hotspot_y| {
             let size = logical_size(theme_size);
             let rendered = render(shape, &color, size, scale).and_then(|image| {
                 let hotspot = image.hotspot;
@@ -353,6 +353,60 @@ fn cursor_for(tool: CurrentDrawingTool, color: Color) -> Option<gdk::Cursor> {
         },
         fallback.as_ref(),
     )
+}
+
+/// `gdk_cursor_new_from_callback`, which GTK calls back for the texture each time the
+/// cursor is shown on an output (theme size, scale).
+///
+/// gdk4 0.10's `Cursor::from_callback` hands GTK a borrowed texture and then drops it,
+/// but GTK takes ownership of the returned texture and unrefs it, so the texture is
+/// freed before GTK reads it and chicolli crashes (SIGSEGV) as soon as the pointer
+/// enters an overlay. This passes GTK its own reference instead.
+#[cfg(feature = "hidpi-cursors")]
+fn cursor_from_callback<F>(callback: F, fallback: Option<&gdk::Cursor>) -> Option<gdk::Cursor>
+where
+    F: Fn(i32, f64, &mut i32, &mut i32, &mut i32, &mut i32) -> gdk::Texture + 'static,
+{
+    use glib::translate::{from_glib_full, IntoGlibPtr, ToGlibPtr};
+
+    unsafe extern "C" fn trampoline<F>(
+        _cursor: *mut gdk::ffi::GdkCursor,
+        cursor_size: std::ffi::c_int,
+        scale: f64,
+        width: *mut std::ffi::c_int,
+        height: *mut std::ffi::c_int,
+        hotspot_x: *mut std::ffi::c_int,
+        hotspot_y: *mut std::ffi::c_int,
+        data: glib::ffi::gpointer,
+    ) -> *mut gdk::ffi::GdkTexture
+    where
+        F: Fn(i32, f64, &mut i32, &mut i32, &mut i32, &mut i32) -> gdk::Texture + 'static,
+    {
+        let callback = &*(data as *const F);
+        let texture = callback(
+            cursor_size,
+            scale,
+            &mut *width,
+            &mut *height,
+            &mut *hotspot_x,
+            &mut *hotspot_y,
+        );
+        // Transfer full: GTK unrefs the texture once it has read it.
+        texture.into_glib_ptr()
+    }
+
+    unsafe extern "C" fn destroy<F>(data: glib::ffi::gpointer) {
+        drop(Box::from_raw(data as *mut F));
+    }
+
+    unsafe {
+        from_glib_full(gdk::ffi::gdk_cursor_new_from_callback(
+            Some(trampoline::<F>),
+            Box::into_raw(Box::new(callback)) as glib::ffi::gpointer,
+            Some(destroy::<F>),
+            fallback.to_glib_none().0,
+        ))
+    }
 }
 
 #[cfg(not(feature = "hidpi-cursors"))]
