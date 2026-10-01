@@ -45,28 +45,30 @@ In pass-through mode only the toolbar takes clicks. Click its pointer toggle (or
 
 ## Configure
 
-Settings live in `~/.config/chicolli/chicolli.json`, created on first run. Every option is optional, and changes apply as soon as you save:
+Settings live in `~/.config/chicolli/chicolli.json`, created empty on first run. Add only what you want to change; everything else keeps its default, and changes apply as soon as you save. All options with their defaults:
 
 ```json
 {
-  "line_thickness": 5.0,
-  "draw_keybind": "1",
-  "arrow_keybind": "2",
-  "reverse_arrow_keybind": "3",
-  "rectangle_keybind": "4",
-  "text_keybind": "5",
-  "highlighter_keybind": "6",
-  "disable_drawing": "d",
-  "color_r": "r",
-  "color_g": "g",
-  "color_b": "b",
-  "color_chooser": "c",
-  "undo": "z",
-  "clear_all": "x"
+  "line_width": 5.0,
+  "keys": {
+    "pen": "1",
+    "arrow": "2",
+    "reverse_arrow": "3",
+    "rectangle": "4",
+    "text": "5",
+    "highlighter": "6",
+    "pass_through": "d",
+    "red": "r",
+    "green": "g",
+    "blue": "b",
+    "color_chooser": "c",
+    "undo": "<Ctrl>z",
+    "clear": "<Ctrl>x"
+  }
 }
 ```
 
-Keys are GTK key names such as `"a"`, `"F1"` or `"space"`; `undo` and `clear_all` are pressed with Ctrl. Unknown key names, unknown options and files that are not valid JSON are reported on stderr, and a broken file keeps the previous settings.
+A key is a GTK key name (`"a"`, `"F1"`, `"space"`), optionally with `<Ctrl>`, `<Shift>`, `<Alt>` or `<Super>` in front, like `"<Ctrl><Shift>z"`. An empty string unbinds the action. Unknown keys and options, and files that are not valid JSON, are reported on stderr; a broken file keeps the previous settings. Config files from older versions (`draw_keybind`, `line_thickness`, ...) still work.
 
 ## License
 

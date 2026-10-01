@@ -1,81 +1,166 @@
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::{
+    collections::BTreeMap,
     fs::File,
     io::{Error, Read},
 };
 
 use dirs::config_dir;
 
-#[derive(Debug, Deserialize, Serialize)]
+/// The settings in effect: what the config file sets, with defaults for the rest.
+#[derive(Debug, Clone, PartialEq)]
 pub struct Configuration {
-    pub line_thickness: Option<f64>,
-    pub draw_keybind: Option<String>,
-    pub arrow_keybind: Option<String>,
-    pub reverse_arrow_keybind: Option<String>,
-    pub rectangle_keybind: Option<String>,
-    pub text_keybind: Option<String>,
-    pub highlighter_keybind: Option<String>,
-    pub disable_drawing: Option<String>,
-    pub color_r: Option<String>,
-    pub color_g: Option<String>,
-    pub color_b: Option<String>,
-    pub color_chooser: Option<String>,
-    pub undo: Option<String>,
-    pub clear_all: Option<String>,
+    /// Stroke width in pixels.
+    pub line_width: f64,
+    pub keys: Keys,
+}
+
+/// Key for each action, as a GTK key name with optional modifiers in front, such as
+/// `"1"`, `"F1"` or `"<Ctrl>z"`. An empty string leaves the action unbound.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Keys {
+    pub pen: String,
+    pub arrow: String,
+    pub reverse_arrow: String,
+    pub rectangle: String,
+    pub text: String,
+    pub highlighter: String,
+    pub pass_through: String,
+    pub red: String,
+    pub green: String,
+    pub blue: String,
+    pub color_chooser: String,
+    pub undo: String,
+    pub clear: String,
 }
 
 impl Default for Configuration {
     fn default() -> Self {
         Configuration {
-            line_thickness: Some(5.0),
-            draw_keybind: Some(String::from("1")),
-            arrow_keybind: Some(String::from("2")),
-            reverse_arrow_keybind: Some(String::from("3")),
-            rectangle_keybind: Some(String::from("4")),
-            text_keybind: Some(String::from("5")),
-            highlighter_keybind: Some(String::from("6")),
-            disable_drawing: Some(String::from("d")),
-            color_r: Some(String::from("r")),
-            color_g: Some(String::from("g")),
-            color_b: Some(String::from("b")),
-            color_chooser: Some(String::from("c")),
-            undo: Some(String::from("z")),
-            clear_all: Some(String::from("x")),
+            line_width: 5.0,
+            keys: Keys {
+                pen: "1".into(),
+                arrow: "2".into(),
+                reverse_arrow: "3".into(),
+                rectangle: "4".into(),
+                text: "5".into(),
+                highlighter: "6".into(),
+                pass_through: "d".into(),
+                red: "r".into(),
+                green: "g".into(),
+                blue: "b".into(),
+                color_chooser: "c".into(),
+                undo: "<Ctrl>z".into(),
+                clear: "<Ctrl>x".into(),
+            },
         }
     }
 }
 
-impl Configuration {
-    pub fn merge(self, other_config: Self) -> Self {
-        Configuration {
-            line_thickness: self.line_thickness.or(other_config.line_thickness),
-            draw_keybind: self.draw_keybind.or(other_config.draw_keybind),
-            arrow_keybind: self.arrow_keybind.or(other_config.arrow_keybind),
-            reverse_arrow_keybind: self
-                .reverse_arrow_keybind
-                .or(other_config.reverse_arrow_keybind),
-            rectangle_keybind: self.rectangle_keybind.or(other_config.rectangle_keybind),
-            text_keybind: self.text_keybind.or(other_config.text_keybind),
-            highlighter_keybind: self
-                .highlighter_keybind
-                .or(other_config.highlighter_keybind),
-            disable_drawing: self.disable_drawing.or(other_config.disable_drawing),
-            color_r: self.color_r.or(other_config.color_r),
-            color_g: self.color_g.or(other_config.color_g),
-            color_b: self.color_b.or(other_config.color_b),
-            color_chooser: self.color_chooser.or(other_config.color_chooser),
-            undo: self.undo.or(other_config.undo),
-            clear_all: self.clear_all.or(other_config.clear_all),
-        }
+/// The file as written; every option may be missing.
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct RawConfig {
+    line_width: Option<f64>,
+    keys: RawKeys,
+    // The flat names used before the "keys" group, still read so older files keep working.
+    line_thickness: Option<f64>,
+    draw_keybind: Option<String>,
+    arrow_keybind: Option<String>,
+    reverse_arrow_keybind: Option<String>,
+    rectangle_keybind: Option<String>,
+    text_keybind: Option<String>,
+    highlighter_keybind: Option<String>,
+    disable_drawing: Option<String>,
+    color_r: Option<String>,
+    color_g: Option<String>,
+    color_b: Option<String>,
+    color_chooser: Option<String>,
+    undo: Option<String>,
+    clear_all: Option<String>,
+    #[serde(flatten)]
+    unknown: BTreeMap<String, serde_json::Value>,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct RawKeys {
+    pen: Option<String>,
+    arrow: Option<String>,
+    reverse_arrow: Option<String>,
+    rectangle: Option<String>,
+    text: Option<String>,
+    highlighter: Option<String>,
+    pass_through: Option<String>,
+    red: Option<String>,
+    green: Option<String>,
+    blue: Option<String>,
+    color_chooser: Option<String>,
+    undo: Option<String>,
+    clear: Option<String>,
+    #[serde(flatten)]
+    unknown: BTreeMap<String, serde_json::Value>,
+}
+
+/// The old flat `undo` and `clear_all` options were always pressed with Ctrl.
+fn with_ctrl(key: String) -> String {
+    if key.is_empty() || key.starts_with('<') {
+        key
+    } else {
+        format!("<Ctrl>{key}")
     }
+}
+
+/// Parses a config file's contents. Options it leaves out get their defaults; the
+/// returned list names options that were ignored because chicolli does not know them.
+pub fn parse_config(content: &str) -> Result<(Configuration, Vec<String>), serde_json::Error> {
+    let raw: RawConfig = serde_json::from_str(content)?;
+    let k = raw.keys;
+    let d = Configuration::default();
+    let pick =
+        |new: Option<String>, old: Option<String>, default: String| new.or(old).unwrap_or(default);
+    let config = Configuration {
+        line_width: raw
+            .line_width
+            .or(raw.line_thickness)
+            .unwrap_or(d.line_width),
+        keys: Keys {
+            pen: pick(k.pen, raw.draw_keybind, d.keys.pen),
+            arrow: pick(k.arrow, raw.arrow_keybind, d.keys.arrow),
+            reverse_arrow: pick(
+                k.reverse_arrow,
+                raw.reverse_arrow_keybind,
+                d.keys.reverse_arrow,
+            ),
+            rectangle: pick(k.rectangle, raw.rectangle_keybind, d.keys.rectangle),
+            text: pick(k.text, raw.text_keybind, d.keys.text),
+            highlighter: pick(k.highlighter, raw.highlighter_keybind, d.keys.highlighter),
+            pass_through: pick(k.pass_through, raw.disable_drawing, d.keys.pass_through),
+            red: pick(k.red, raw.color_r, d.keys.red),
+            green: pick(k.green, raw.color_g, d.keys.green),
+            blue: pick(k.blue, raw.color_b, d.keys.blue),
+            color_chooser: pick(k.color_chooser, raw.color_chooser, d.keys.color_chooser),
+            undo: pick(k.undo, raw.undo.map(with_ctrl), d.keys.undo),
+            clear: pick(k.clear, raw.clear_all.map(with_ctrl), d.keys.clear),
+        },
+    };
+    let unknown = raw
+        .unknown
+        .into_keys()
+        .chain(k.unknown.into_keys().map(|name| format!("keys.{name}")))
+        .collect();
+    Ok((config, unknown))
 }
 
 const CONFIG_NAME: &str = "chicolli.json";
 const CONFIG_DIR: &str = "chicolli";
 
+/// A new config file starts out empty, so every option follows the defaults, including
+/// defaults changed by later versions; the README lists what can go in it.
+const NEW_CONFIG: &str = "{\n  \"keys\": {}\n}\n";
+
 fn write_default_config(path: &std::path::Path) {
-    let mut file = std::fs::File::create(path).unwrap();
-    serde_json::to_writer_pretty(&mut file, &Configuration::default()).unwrap();
+    std::fs::write(path, NEW_CONFIG).unwrap();
 }
 
 pub fn get_config() -> Configuration {
@@ -136,74 +221,13 @@ pub fn read_config_file(file_path: &std::path::Path) -> Result<Configuration, Er
     let mut content = String::new();
     file.read_to_string(&mut content)?;
 
-    // Deserialize the JSON content into the Configuration struct
-    let config = serde_json::from_str::<Configuration>(&content)?;
-    for option in unknown_options(&content) {
+    let (config, unknown) = parse_config(&content)?;
+    for option in unknown {
         eprintln!(
             "chicolli: ignoring unknown option {option:?} in {}",
             file_path.display()
         );
     }
 
-    Ok(config.merge(Configuration::default()))
-}
-
-/// Top-level keys of a config file that are not options, such as misspelled ones,
-/// which serde would otherwise drop without a word.
-pub fn unknown_options(content: &str) -> Vec<String> {
-    let Ok(serde_json::Value::Object(given)) = serde_json::from_str(content) else {
-        return Vec::new();
-    };
-    let Ok(serde_json::Value::Object(known)) = serde_json::to_value(Configuration::default())
-    else {
-        return Vec::new();
-    };
-    given
-        .keys()
-        .filter(|key| !known.contains_key(*key))
-        .cloned()
-        .collect()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::Configuration;
-
-    #[test]
-    fn merge_prefers_present_values_and_falls_back_to_defaults_source() {
-        let primary = Configuration {
-            line_thickness: Some(9.0),
-            draw_keybind: None,
-            arrow_keybind: Some("a".to_string()),
-            reverse_arrow_keybind: None,
-            rectangle_keybind: None,
-            text_keybind: Some("t".to_string()),
-            highlighter_keybind: None,
-            disable_drawing: None,
-            color_r: Some("R".to_string()),
-            color_g: None,
-            color_b: None,
-            color_chooser: None,
-            undo: Some("u".to_string()),
-            clear_all: None,
-        };
-
-        let fallback = Configuration::default();
-        let merged = primary.merge(fallback);
-
-        assert_eq!(merged.line_thickness, Some(9.0));
-        assert_eq!(merged.arrow_keybind, Some("a".to_string()));
-        assert_eq!(merged.text_keybind, Some("t".to_string()));
-        assert_eq!(merged.color_r, Some("R".to_string()));
-        assert_eq!(merged.undo, Some("u".to_string()));
-        assert_eq!(merged.draw_keybind, Some("1".to_string()));
-        assert_eq!(merged.reverse_arrow_keybind, Some("3".to_string()));
-        assert_eq!(merged.rectangle_keybind, Some("4".to_string()));
-        assert_eq!(merged.highlighter_keybind, Some("6".to_string()));
-        assert_eq!(merged.disable_drawing, Some("d".to_string()));
-        assert_eq!(merged.color_g, Some("g".to_string()));
-        assert_eq!(merged.color_b, Some("b".to_string()));
-        assert_eq!(merged.color_chooser, Some("c".to_string()));
-        assert_eq!(merged.clear_all, Some("x".to_string()));
-    }
+    Ok(config)
 }

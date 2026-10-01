@@ -1,29 +1,77 @@
 use chicolli::config::Configuration;
-use chicolli::keybinds::Keybinds;
-use gtk::gdk::Key;
+use chicolli::keybinds::{Binding, Keybinds};
+use gtk::gdk::{Key, ModifierType};
 
 #[test]
 fn default_keybinds_resolve_to_gtk_keys() {
     let keys = Keybinds::from_config(&Configuration::default());
 
-    assert_eq!(keys.draw, Some(Key::_1));
-    assert_eq!(keys.highlighter, Some(Key::_6));
-    assert_eq!(keys.disable_drawing, Some(Key::d));
-    assert_eq!(keys.undo, Some(Key::z));
-    assert_eq!(keys.clear_all, Some(Key::x));
+    let plain = |key| {
+        Some(Binding {
+            key,
+            modifiers: ModifierType::empty(),
+        })
+    };
+    assert_eq!(keys.pen, plain(Key::_1));
+    assert_eq!(keys.highlighter, plain(Key::_6));
+    assert_eq!(keys.pass_through, plain(Key::d));
+    assert_eq!(
+        keys.undo,
+        Some(Binding {
+            key: Key::z,
+            modifiers: ModifierType::CONTROL_MASK,
+        })
+    );
 }
 
 #[test]
-fn unknown_or_missing_key_names_bind_nothing() {
-    let conf = Configuration {
-        draw_keybind: Some("not-a-key".to_string()),
-        arrow_keybind: None,
-        rectangle_keybind: Some("F1".to_string()),
-        ..Configuration::default()
-    };
+fn unknown_or_empty_keys_bind_nothing() {
+    let mut conf = Configuration::default();
+    conf.keys.pen = "not-a-key".into();
+    conf.keys.arrow = String::new();
+    conf.keys.text = "<Hyper>t".into();
+    conf.keys.rectangle = "F1".into();
     let keys = Keybinds::from_config(&conf);
 
-    assert_eq!(keys.draw, None);
+    assert_eq!(keys.pen, None);
     assert_eq!(keys.arrow, None);
-    assert_eq!(keys.rectangle, Some(Key::F1));
+    assert_eq!(keys.text, None);
+    assert_eq!(keys.rectangle.map(|b| b.key), Some(Key::F1));
+}
+
+#[test]
+fn modifiers_parse_in_any_case_and_order() {
+    let binding = Binding::parse("<ctrl><SHIFT>z").unwrap();
+    assert_eq!(binding.key, Key::z);
+    assert_eq!(
+        binding.modifiers,
+        ModifierType::CONTROL_MASK | ModifierType::SHIFT_MASK
+    );
+    assert_eq!(
+        Binding::parse("<Super>space").unwrap().modifiers,
+        ModifierType::SUPER_MASK
+    );
+    assert_eq!(Binding::parse("<Ctrl z"), None);
+}
+
+#[test]
+fn bindings_need_their_exact_modifiers() {
+    let undo = Binding::parse("<Ctrl>z").unwrap();
+    assert!(undo.matches(Key::z, ModifierType::CONTROL_MASK));
+    assert!(!undo.matches(Key::z, ModifierType::empty()));
+    assert!(!undo.matches(Key::z, ModifierType::CONTROL_MASK | ModifierType::ALT_MASK));
+
+    let pen = Binding::parse("1").unwrap();
+    assert!(pen.matches(Key::_1, ModifierType::empty()));
+    assert!(!pen.matches(Key::_1, ModifierType::CONTROL_MASK));
+
+    // Shift is part of the key unless the binding names it.
+    let upper = Binding::parse("R").unwrap();
+    assert!(upper.matches(Key::R, ModifierType::SHIFT_MASK));
+    let redo = Binding::parse("<Ctrl><Shift>z").unwrap();
+    assert!(redo.matches(
+        Key::Z,
+        ModifierType::CONTROL_MASK | ModifierType::SHIFT_MASK
+    ));
+    assert!(!redo.matches(Key::z, ModifierType::CONTROL_MASK));
 }
