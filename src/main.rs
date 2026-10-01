@@ -152,7 +152,7 @@ impl State {
     }
 
     /// Re-reads the config file after it changed on disk. Keybinds always follow the file;
-    /// the line width only when `line_thickness` itself was edited, so a width picked on the
+    /// the line width only when `line_width` itself was edited, so a width picked on the
     /// toolbar survives unrelated edits. A file that fails to parse keeps the current settings.
     fn reload_config(&self, path: &std::path::Path) {
         let conf = match config::read_config_file(path) {
@@ -168,9 +168,8 @@ impl State {
             }
         };
         self.keybinds.set(keybinds::Keybinds::from_config(&conf));
-        let thickness_edited = conf.line_thickness != self.conf.borrow().line_thickness;
-        if let Some(width) = conf.line_thickness.filter(|_| thickness_edited) {
-            *self.line_width.borrow_mut() = width;
+        if conf.line_width != self.conf.borrow().line_width {
+            *self.line_width.borrow_mut() = conf.line_width;
             self.sync_ui();
         }
         *self.conf.borrow_mut() = conf;
@@ -659,39 +658,41 @@ impl State {
         }
 
         let keys = self.keybinds.get();
-        let ctrl = modifier.contains(gtk::gdk::ModifierType::CONTROL_MASK);
+        let hit = |binding: Option<keybinds::Binding>| {
+            binding.is_some_and(|binding| binding.matches(keyval, modifier))
+        };
         match keyval {
             // TOOLS
-            _ if keys.draw == Some(keyval) => {
+            _ if hit(keys.pen) => {
                 *self.current_tool.borrow_mut() = CurrentDrawingTool::NormalLine;
             }
-            _ if keys.arrow == Some(keyval) => {
+            _ if hit(keys.arrow) => {
                 *self.current_tool.borrow_mut() = CurrentDrawingTool::NormalArrowHeadPointer;
             }
-            _ if keys.reverse_arrow == Some(keyval) => {
+            _ if hit(keys.reverse_arrow) => {
                 *self.current_tool.borrow_mut() = CurrentDrawingTool::NormalArrowHeadBase;
             }
-            _ if keys.rectangle == Some(keyval) => {
+            _ if hit(keys.rectangle) => {
                 *self.current_tool.borrow_mut() = CurrentDrawingTool::NormalRectangle;
             }
-            _ if keys.text == Some(keyval) => {
+            _ if hit(keys.text) => {
                 *self.current_tool.borrow_mut() = CurrentDrawingTool::TextLabel;
             }
-            _ if keys.highlighter == Some(keyval) => {
+            _ if hit(keys.highlighter) => {
                 *self.current_tool.borrow_mut() = CurrentDrawingTool::Highlighter;
             }
-            _ if keys.disable_drawing == Some(keyval) => {
+            _ if hit(keys.pass_through) => {
                 self.end_text_input();
                 self.redraw();
                 self.set_pass_through(true);
             }
             // colors
-            _ if keys.color_r == Some(keyval) => *self.color.borrow_mut() = colors::RED,
-            _ if keys.color_g == Some(keyval) => *self.color.borrow_mut() = colors::GREEN,
-            _ if keys.color_b == Some(keyval) => *self.color.borrow_mut() = colors::BLUE,
-            _ if keys.undo == Some(keyval) && ctrl => self.undo(),
-            _ if keys.clear_all == Some(keyval) && ctrl => self.clear(),
-            _ if keys.color_chooser == Some(keyval) => {
+            _ if hit(keys.red) => *self.color.borrow_mut() = colors::RED,
+            _ if hit(keys.green) => *self.color.borrow_mut() = colors::GREEN,
+            _ if hit(keys.blue) => *self.color.borrow_mut() = colors::BLUE,
+            _ if hit(keys.undo) => self.undo(),
+            _ if hit(keys.clear) => self.clear(),
+            _ if hit(keys.color_chooser) => {
                 let current = *self.color.borrow();
                 self.toolbar.open_color_chooser(&current);
             }
@@ -785,7 +786,7 @@ impl State {
 // https://github.com/wmww/gtk-layer-shell/blob/master/examples/simple-example.c
 fn activate(application: &gtk::Application) {
     let conf = config::get_config();
-    let line_width = conf.line_thickness.unwrap_or(2.0);
+    let line_width = conf.line_width;
 
     let toolbar = toolbar::Toolbar::new();
     toolbar.update(&CurrentDrawingTool::NormalLine, &colors::RED, line_width);
