@@ -1,5 +1,6 @@
 use drawing::drawing_tool::{CurrentDrawingTool, DrawingTool};
 
+use gtk::gio;
 use gtk::glib::{self, Propagation};
 use gtk::{
     cairo::{RectangleInt, Region},
@@ -18,6 +19,7 @@ pub mod config;
 pub mod cursors;
 pub mod drawing;
 pub mod geometry;
+pub mod keybinds;
 pub mod toolbar;
 
 /// A drawn element and the canvas (monitor) it was drawn on.
@@ -45,7 +47,9 @@ struct Canvas {
 #[derive(Clone)]
 struct State {
     app: gtk::Application,
-    conf: Rc<config::Configuration>,
+    conf: Rc<RefCell<config::Configuration>>,
+    keybinds: Rc<Cell<keybinds::Keybinds>>,
+    config_monitor: Rc<RefCell<Option<gio::FileMonitor>>>,
     elements: Elements,
     color: Rc<RefCell<colors::Color>>,
     current_tool: Rc<RefCell<CurrentDrawingTool>>,
@@ -145,6 +149,67 @@ impl State {
         *self.text_input_mode.borrow_mut() = false;
         self.elements.borrow_mut().clear();
         self.redraw();
+    }
+
+    /// Re-reads the config file after it changed on disk. Keybinds always follow the file;
+    /// the line width only when `line_thickness` itself was edited, so a width picked on the
+    /// toolbar survives unrelated edits. A file that fails to parse keeps the current settings.
+    fn reload_config(&self, path: &std::path::Path) {
+        let conf = match config::read_config_file(path) {
+            Ok(conf) => conf,
+            // Moved away or deleted; wait for the next version to appear.
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => return,
+            Err(err) => {
+                eprintln!(
+                    "chicolli: keeping the previous config, {}: {err}",
+                    path.display()
+                );
+                return;
+            }
+        };
+        self.keybinds.set(keybinds::Keybinds::from_config(&conf));
+        let thickness_edited = conf.line_thickness != self.conf.borrow().line_thickness;
+        if let Some(width) = conf.line_thickness.filter(|_| thickness_edited) {
+            *self.line_width.borrow_mut() = width;
+            self.sync_ui();
+        }
+        *self.conf.borrow_mut() = conf;
+    }
+
+    /// Reloads the config whenever its file is saved, including editors that save by
+    /// writing a temporary file and renaming it over the original.
+    fn watch_config(&self) {
+        let Some(path) = config::config_file_path() else {
+            return;
+        };
+        let monitor = match gio::File::for_path(&path)
+            .monitor_file(gio::FileMonitorFlags::WATCH_MOVES, gio::Cancellable::NONE)
+        {
+            Ok(monitor) => monitor,
+            Err(err) => {
+                eprintln!(
+                    "chicolli: not watching {} for changes: {err}",
+                    path.display()
+                );
+                return;
+            }
+        };
+        monitor.connect_changed(glib::clone!(
+            #[strong(rename_to = state)]
+            self,
+            move |_, _, _, event| {
+                if matches!(
+                    event,
+                    gio::FileMonitorEvent::ChangesDoneHint
+                        | gio::FileMonitorEvent::Renamed
+                        | gio::FileMonitorEvent::MovedIn
+                ) {
+                    state.reload_config(&path);
+                }
+            },
+        ));
+        // The monitor stops when dropped; keep it for the life of the app.
+        *self.config_monitor.borrow_mut() = Some(monitor);
     }
 
     fn set_color(&self, rgba: colors::Color) {
@@ -593,69 +658,40 @@ impl State {
             }
         }
 
-        let conf = &self.conf;
-        // close your eyes
-        let _draw_key =
-            Key::from_name(conf.draw_keybind.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
-        let _arrow_key =
-            Key::from_name(conf.arrow_keybind.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
-        let _reverse_arrow_key =
-            Key::from_name(conf.reverse_arrow_keybind.as_deref().unwrap_or(""))
-                .unwrap_or(Key::Abelowdot);
-        let _rectangle_key = Key::from_name(conf.rectangle_keybind.as_deref().unwrap_or(""))
-            .unwrap_or(Key::Abelowdot);
-        let _text_key =
-            Key::from_name(conf.text_keybind.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
-        let _highlighter_key = Key::from_name(conf.highlighter_keybind.as_deref().unwrap_or(""))
-            .unwrap_or(Key::Abelowdot);
-        let _disable_drawing_key =
-            Key::from_name(conf.disable_drawing.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
-        let _color_r =
-            Key::from_name(conf.color_r.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
-        let _color_g =
-            Key::from_name(conf.color_g.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
-        let _color_b =
-            Key::from_name(conf.color_b.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
-        let _color_chooser =
-            Key::from_name(conf.color_chooser.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
-        let _undo_key =
-            Key::from_name(conf.undo.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
-        let _clear_all_key =
-            Key::from_name(conf.clear_all.as_deref().unwrap_or("")).unwrap_or(Key::Abelowdot);
-
+        let keys = self.keybinds.get();
         let ctrl = modifier.contains(gtk::gdk::ModifierType::CONTROL_MASK);
         match keyval {
             // TOOLS
-            _ if _draw_key == keyval => {
+            _ if keys.draw == Some(keyval) => {
                 *self.current_tool.borrow_mut() = CurrentDrawingTool::NormalLine;
             }
-            _ if _arrow_key == keyval => {
+            _ if keys.arrow == Some(keyval) => {
                 *self.current_tool.borrow_mut() = CurrentDrawingTool::NormalArrowHeadPointer;
             }
-            _ if _reverse_arrow_key == keyval => {
+            _ if keys.reverse_arrow == Some(keyval) => {
                 *self.current_tool.borrow_mut() = CurrentDrawingTool::NormalArrowHeadBase;
             }
-            _ if _rectangle_key == keyval => {
+            _ if keys.rectangle == Some(keyval) => {
                 *self.current_tool.borrow_mut() = CurrentDrawingTool::NormalRectangle;
             }
-            _ if _text_key == keyval => {
+            _ if keys.text == Some(keyval) => {
                 *self.current_tool.borrow_mut() = CurrentDrawingTool::TextLabel;
             }
-            _ if _highlighter_key == keyval => {
+            _ if keys.highlighter == Some(keyval) => {
                 *self.current_tool.borrow_mut() = CurrentDrawingTool::Highlighter;
             }
-            _ if _disable_drawing_key == keyval => {
+            _ if keys.disable_drawing == Some(keyval) => {
                 self.end_text_input();
                 self.redraw();
                 self.set_pass_through(true);
             }
             // colors
-            _ if _color_r == keyval => *self.color.borrow_mut() = colors::RED,
-            _ if _color_g == keyval => *self.color.borrow_mut() = colors::GREEN,
-            _ if _color_b == keyval => *self.color.borrow_mut() = colors::BLUE,
-            _ if _undo_key == keyval && ctrl => self.undo(),
-            _ if _clear_all_key == keyval && ctrl => self.clear(),
-            _ if _color_chooser == keyval => {
+            _ if keys.color_r == Some(keyval) => *self.color.borrow_mut() = colors::RED,
+            _ if keys.color_g == Some(keyval) => *self.color.borrow_mut() = colors::GREEN,
+            _ if keys.color_b == Some(keyval) => *self.color.borrow_mut() = colors::BLUE,
+            _ if keys.undo == Some(keyval) && ctrl => self.undo(),
+            _ if keys.clear_all == Some(keyval) && ctrl => self.clear(),
+            _ if keys.color_chooser == Some(keyval) => {
                 let current = *self.color.borrow();
                 self.toolbar.open_color_chooser(&current);
             }
@@ -756,7 +792,9 @@ fn activate(application: &gtk::Application) {
 
     let state = State {
         app: application.clone(),
-        conf: Rc::new(conf),
+        keybinds: Rc::new(Cell::new(keybinds::Keybinds::from_config(&conf))),
+        conf: Rc::new(RefCell::new(conf)),
+        config_monitor: Rc::new(RefCell::new(None)),
         elements: Rc::new(RefCell::new(Vec::new())),
         color: Rc::new(RefCell::new(colors::RED)),
         current_tool: Rc::new(RefCell::new(CurrentDrawingTool::NormalLine)),
@@ -768,6 +806,7 @@ fn activate(application: &gtk::Application) {
         next_canvas_id: Rc::new(Cell::new(0)),
     };
     state.connect_toolbar();
+    state.watch_config();
 
     // Launching chicolli again (e.g. from the compositor shortcut) reaches this running
     // instance and brings it back from pass-through, with the drawing intact.

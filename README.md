@@ -106,6 +106,8 @@ Chicolli uses a JSON config file located at:
 
 On first run, the config file is created automatically with default values. You only need to specify the options you want to change — any missing fields fall back to their defaults.
 
+Changes to the file apply while Chicolli is running, no restart needed. Keybinds follow every save; `line_thickness` changes the current width only when that value itself is edited. A save that is not valid JSON is reported on stderr and the previous settings stay in effect.
+
 ### Default configuration
 
 ```json
@@ -131,7 +133,7 @@ On first run, the config file is created automatically with default values. You 
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `line_thickness` | float | `2.0` | Initial stroke width in pixels. Can be adjusted at runtime with the scroll wheel. |
+| `line_thickness` | float | `2.0` | Initial stroke width in pixels. Can be adjusted at runtime with the scroll wheel or the toolbar; editing it in the file sets the current width. |
 | `draw_keybind` | string | `"1"` | Key to switch to the freehand drawing tool. |
 | `arrow_keybind` | string | `"2"` | Key to switch to the arrow tool (arrowhead at pointer end). |
 | `reverse_arrow_keybind` | string | `"3"` | Key to switch to the reverse arrow tool (arrowhead at start). |
@@ -146,7 +148,7 @@ On first run, the config file is created automatically with default values. You 
 | `undo` | string | `"z"` | Key (with Ctrl) to undo the last drawn element. |
 | `clear_all` | string | `"x"` | Key (with Ctrl) to clear all drawn elements. |
 
-Keybind values are GTK key names (e.g. `"1"`, `"a"`, `"F1"`, `"space"`).
+Keybind values are GTK key names (e.g. `"1"`, `"a"`, `"F1"`, `"space"`). An unknown name is reported on stderr and leaves that action unbound.
 
 ### Custom cursors
 
