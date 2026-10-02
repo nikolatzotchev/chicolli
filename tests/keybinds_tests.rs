@@ -75,3 +75,13 @@ fn bindings_need_their_exact_modifiers() {
     ));
     assert!(!redo.matches(Key::z, ModifierType::CONTROL_MASK));
 }
+
+#[test]
+fn redo_and_undo_do_not_overlap() {
+    let keys = Keybinds::from_config(&Configuration::default());
+    let (undo, redo) = (keys.undo.unwrap(), keys.redo.unwrap());
+    let ctrl_shift = ModifierType::CONTROL_MASK | ModifierType::SHIFT_MASK;
+    assert!(redo.matches(Key::Z, ctrl_shift));
+    assert!(!undo.matches(Key::Z, ctrl_shift));
+    assert!(!redo.matches(Key::z, ModifierType::CONTROL_MASK));
+}

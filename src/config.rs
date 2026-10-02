@@ -31,6 +31,7 @@ pub struct Keys {
     pub blue: String,
     pub color_chooser: String,
     pub undo: String,
+    pub redo: String,
     pub clear: String,
 }
 
@@ -51,6 +52,7 @@ impl Default for Configuration {
                 blue: "b".into(),
                 color_chooser: "c".into(),
                 undo: "<Ctrl>z".into(),
+                redo: "<Ctrl><Shift>z".into(),
                 clear: "<Ctrl>x".into(),
             },
         }
@@ -97,6 +99,7 @@ struct RawKeys {
     blue: Option<String>,
     color_chooser: Option<String>,
     undo: Option<String>,
+    redo: Option<String>,
     clear: Option<String>,
     #[serde(flatten)]
     unknown: BTreeMap<String, serde_json::Value>,
@@ -141,6 +144,7 @@ pub fn parse_config(content: &str) -> Result<(Configuration, Vec<String>), serde
             blue: pick(k.blue, raw.color_b, d.keys.blue),
             color_chooser: pick(k.color_chooser, raw.color_chooser, d.keys.color_chooser),
             undo: pick(k.undo, raw.undo.map(with_ctrl), d.keys.undo),
+            redo: k.redo.unwrap_or(d.keys.redo),
             clear: pick(k.clear, raw.clear_all.map(with_ctrl), d.keys.clear),
         },
     };
