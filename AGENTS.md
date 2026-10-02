@@ -34,6 +34,7 @@ src/
 ├── config.rs               # JSON config parsing (with old flat names) from ~/.config/chicolli/chicolli.json
 ├── keybinds.rs             # Keybinds resolved from config key names once per (re)load
 ├── colors.rs               # Color type alias (gtk::gdk::RGBA) and preset constants
+├── capture.rs              # Screenshots of the annotated desktop (grim, else the xdg screenshot portal) for copy/save
 ├── cursors.rs              # Runtime Cairo-generated tool cursors (ToolCursor keeps them matched to tool and color)
 ├── toolbar.rs              # Overlay toolbar for tools, colors, line width, undo/clear
 ├── drawing.rs              # Module re-exports for drawing tools
@@ -59,6 +60,7 @@ shell.nix                # Nix development shell with native build dependencies
 - **Toolbar**: `src/toolbar.rs` owns tool toggles, color presets/chooser swatch, line-width buttons, and undo/clear buttons. Keep toolbar state synchronized with keyboard shortcuts and mouse-wheel changes via `Toolbar::update`.
 - **Constrained drawing**: `DrawingTool::set_constrained` is used for Shift-modified snapping. `snap_angle`, `snap_square`, the spline solver `spline_controls` and `arrow_head` live in `src/geometry.rs` (GTK-free, unit-tested in `tests/geometry_tests.rs`) and are re-exported where needed.
 - **Layer behavior**: Every monitor gets its own fullscreen overlay window (a `Canvas` in `main.rs`), kept in step with monitor hotplug by `State::sync_monitors`; the windows share one `State` (tool, color, width, elements tagged with the canvas they were started on, so Undo removes the latest element on any monitor). Element points are in global layout coordinates (each overlay adds its monitor's `geometry()` origin to input and translates by it when drawing), so a stroke dragged past a monitor edge continues on the neighbouring monitor whatever their resolutions or scales. There is one toolbar, and it moves to the overlay the pointer enters. The windows use layer-shell overlay mode and exclusive keyboard mode. The color chooser is a popover on the toolbar swatch (a popup of the overlay, so tiling compositors never tile it); the key handler passes keys through while it is open. Pass-through (`disable_drawing` key or the toolbar's pass-through toggle) shrinks the input region to the toolbar and sets `KeyboardMode::None` via `State::set_pass_through` in `main.rs` (overlays without the toolbar take no input); a second launch re-activates the running instance (GApplication uniqueness) and restores drawing mode.
+- **Copy/save**: the `copy`/`save` keys (Ctrl+C/Ctrl+S) call `State::capture`, which ends text input, hides the toolbar, waits 200ms for the compositor, and screenshots all outputs via `src/capture.rs` (`grim -`, else the `org.freedesktop.portal.Screenshot` portal, non-interactive). Copy goes through `wl-copy` so it outlives the app, falling back to the GDK clipboard; save writes `chicolli-<stamp>.png` to the XDG pictures dir (else `~/Pictures`). The outcome is reported on stderr and as a `gio::Notification`.
 
 ## Code Style
 

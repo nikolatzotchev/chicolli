@@ -33,6 +33,10 @@ pub struct Keys {
     pub undo: String,
     pub redo: String,
     pub clear: String,
+    /// Copy the screen with the drawing to the clipboard.
+    pub copy: String,
+    /// Save the screen with the drawing as a PNG in the pictures folder.
+    pub save: String,
 }
 
 impl Default for Configuration {
@@ -54,6 +58,8 @@ impl Default for Configuration {
                 undo: "<Ctrl>z".into(),
                 redo: "<Ctrl><Shift>z".into(),
                 clear: "<Ctrl>x".into(),
+                copy: "<Ctrl>c".into(),
+                save: "<Ctrl>s".into(),
             },
         }
     }
@@ -101,6 +107,8 @@ struct RawKeys {
     undo: Option<String>,
     redo: Option<String>,
     clear: Option<String>,
+    copy: Option<String>,
+    save: Option<String>,
     #[serde(flatten)]
     unknown: BTreeMap<String, serde_json::Value>,
 }
@@ -146,6 +154,8 @@ pub fn parse_config(content: &str) -> Result<(Configuration, Vec<String>), serde
             undo: pick(k.undo, raw.undo.map(with_ctrl), d.keys.undo),
             redo: k.redo.unwrap_or(d.keys.redo),
             clear: pick(k.clear, raw.clear_all.map(with_ctrl), d.keys.clear),
+            copy: k.copy.unwrap_or(d.keys.copy),
+            save: k.save.unwrap_or(d.keys.save),
         },
     };
     let unknown = raw

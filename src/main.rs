@@ -14,6 +14,7 @@ use std::{
     rc::Rc,
 };
 
+pub mod capture;
 pub mod colors;
 pub mod config;
 pub mod cursors;
@@ -63,6 +64,15 @@ struct State {
     toolbar: Rc<toolbar::Toolbar>,
     canvases: Rc<RefCell<Vec<Canvas>>>,
     next_canvas_id: Rc<Cell<u32>>,
+    /// A screenshot is being taken; further copy/save presses wait for it.
+    capturing: Rc<Cell<bool>>,
+}
+
+/// What to do with a screenshot of the annotated desktop.
+#[derive(Clone, Copy)]
+enum Capture {
+    Copy,
+    Save,
 }
 
 /// Whether Shift is down after this key event. The event's modifier state is the one
@@ -184,6 +194,60 @@ impl State {
         self.end_text_input();
         self.elements.borrow_mut().clear();
         self.redraw();
+    }
+
+    /// Screenshots the desktop with the drawing on it, without the toolbar, and copies
+    /// it to the clipboard or saves it in the pictures folder.
+    fn capture(&self, what: Capture) {
+        if self.capturing.replace(true) {
+            return;
+        }
+        // Finish the label being typed so its caret is not in the picture.
+        self.end_text_input();
+        self.redraw();
+        let toolbar = self.toolbar.widget().clone();
+        toolbar.set_visible(false);
+        // Give the compositor a moment to show the overlays without the toolbar.
+        glib::timeout_add_local_once(
+            std::time::Duration::from_millis(200),
+            glib::clone!(
+                #[strong(rename_to = state)]
+                self,
+                move || {
+                    capture::screenshot(move |png| {
+                        toolbar.set_visible(true);
+                        state.capturing.set(false);
+                        let result = png.and_then(|png| match what {
+                            Capture::Copy => {
+                                capture::copy_to_clipboard(png, display());
+                                Ok("Copied the screen to the clipboard".to_owned())
+                            }
+                            Capture::Save => capture::save(&png)
+                                .map(|path| format!("Saved the screen to {}", path.display())),
+                        });
+                        state.notify(result);
+                    })
+                },
+            ),
+        );
+    }
+
+    /// Reports how a copy or save went, on stderr and as a desktop notification.
+    fn notify(&self, result: Result<String, String>) {
+        let notification = match &result {
+            Ok(message) => {
+                eprintln!("chicolli: {message}");
+                gio::Notification::new(message)
+            }
+            Err(err) => {
+                eprintln!("chicolli: could not capture the screen: {err}");
+                let notification = gio::Notification::new("Could not capture the screen");
+                notification.set_body(Some(err));
+                notification
+            }
+        };
+        self.app
+            .send_notification(Some("chicolli-capture"), &notification);
     }
 
     /// Re-reads the config file after it changed on disk. Keybinds always follow the file;
@@ -752,6 +816,8 @@ impl State {
             _ if hit(keys.redo) => self.redo(),
             _ if hit(keys.undo) => self.undo(),
             _ if hit(keys.clear) => self.clear(),
+            _ if hit(keys.copy) => self.capture(Capture::Copy),
+            _ if hit(keys.save) => self.capture(Capture::Save),
             _ if hit(keys.color_chooser) => {
                 let current = *self.color.borrow();
                 self.toolbar.open_color_chooser(&current);
@@ -871,6 +937,7 @@ fn activate(application: &gtk::Application) {
         toolbar: Rc::new(toolbar),
         canvases: Rc::new(RefCell::new(Vec::new())),
         next_canvas_id: Rc::new(Cell::new(0)),
+        capturing: Rc::new(Cell::new(false)),
     };
     state.connect_toolbar();
     state.watch_config();

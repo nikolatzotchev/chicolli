@@ -70,6 +70,8 @@ pub struct Keybinds {
     pub undo: Option<Binding>,
     pub redo: Option<Binding>,
     pub clear: Option<Binding>,
+    pub copy: Option<Binding>,
+    pub save: Option<Binding>,
 }
 
 /// Resolves one key, warning about names that do not parse.
@@ -102,6 +104,8 @@ impl Keybinds {
             undo: parse("undo", &k.undo),
             redo: parse("redo", &k.redo),
             clear: parse("clear", &k.clear),
+            copy: parse("copy", &k.copy),
+            save: parse("save", &k.save),
         }
     }
 }
