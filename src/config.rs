@@ -37,6 +37,8 @@ pub struct Keys {
     pub copy: String,
     /// Save the screen with the drawing as a PNG in the pictures folder.
     pub save: String,
+    /// Close chicolli. Escape only quits when no text label is being typed.
+    pub quit: String,
 }
 
 impl Default for Configuration {
@@ -60,10 +62,15 @@ impl Default for Configuration {
                 clear: "<Ctrl>x".into(),
                 copy: "<Ctrl>c".into(),
                 save: "<Ctrl>s".into(),
+                quit: "Escape".into(),
             },
         }
     }
 }
+
+/// Line widths the config file may set; the toolbar and scroll wheel keep to the same range.
+pub const MIN_LINE_WIDTH: f64 = 1.0;
+pub const MAX_LINE_WIDTH: f64 = 200.0;
 
 /// The file as written; every option may be missing.
 #[derive(Deserialize, Default)]
@@ -109,6 +116,7 @@ struct RawKeys {
     clear: Option<String>,
     copy: Option<String>,
     save: Option<String>,
+    quit: Option<String>,
     #[serde(flatten)]
     unknown: BTreeMap<String, serde_json::Value>,
 }
@@ -134,6 +142,16 @@ pub fn parse_config(content: &str) -> Result<(Configuration, Vec<String>), serde
         line_width: raw
             .line_width
             .or(raw.line_thickness)
+            .filter(|&width| {
+                let valid = (MIN_LINE_WIDTH..=MAX_LINE_WIDTH).contains(&width);
+                if !valid {
+                    eprintln!(
+                        "chicolli: line_width must be between {MIN_LINE_WIDTH} and {MAX_LINE_WIDTH}, using {}",
+                        d.line_width
+                    );
+                }
+                valid
+            })
             .unwrap_or(d.line_width),
         keys: Keys {
             pen: pick(k.pen, raw.draw_keybind, d.keys.pen),
@@ -156,6 +174,7 @@ pub fn parse_config(content: &str) -> Result<(Configuration, Vec<String>), serde
             clear: pick(k.clear, raw.clear_all.map(with_ctrl), d.keys.clear),
             copy: k.copy.unwrap_or(d.keys.copy),
             save: k.save.unwrap_or(d.keys.save),
+            quit: k.quit.unwrap_or(d.keys.quit),
         },
     };
     let unknown = raw
@@ -173,8 +192,8 @@ const CONFIG_DIR: &str = "chicolli";
 /// defaults changed by later versions; the README lists what can go in it.
 const NEW_CONFIG: &str = "{\n  \"keys\": {}\n}\n";
 
-fn write_default_config(path: &std::path::Path) {
-    std::fs::write(path, NEW_CONFIG).unwrap();
+fn write_default_config(path: &std::path::Path) -> Result<(), Error> {
+    std::fs::write(path, NEW_CONFIG)
 }
 
 pub fn get_config() -> Configuration {
@@ -182,7 +201,7 @@ pub fn get_config() -> Configuration {
         Ok(conf) => conf,
         Err(r) => {
             eprintln!(
-                "could not create the default config file, using default build in, {}",
+                "chicolli: could not read or create the config file, using the defaults: {}",
                 r
             );
             Configuration::default()
@@ -213,13 +232,13 @@ pub fn read_config() -> Result<Configuration, Error> {
                     let config = read_config_file(conf_path.as_path())?;
                     Ok(config)
                 } else {
-                    write_default_config(conf_path.as_path());
+                    write_default_config(conf_path.as_path())?;
                     read_config()
                 }
             } else {
                 std::fs::create_dir_all(conf_path.as_path())?;
                 conf_path.push(CONFIG_NAME);
-                write_default_config(conf_path.as_path());
+                write_default_config(conf_path.as_path())?;
                 read_config()
             }
         }

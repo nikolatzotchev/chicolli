@@ -30,6 +30,9 @@ jobs:
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings
 
+      - name: Clippy without hidpi-cursors (GTK < 4.16 build)
+        run: cargo clippy --all-targets --no-default-features -- -D warnings
+
       - name: Tests (locked)
         run: cargo test --locked --verbose
 

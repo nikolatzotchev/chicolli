@@ -59,3 +59,14 @@ fn unknown_options_are_reported() {
 fn invalid_json_is_an_error() {
     assert!(parse_config("not json").is_err());
 }
+
+#[test]
+fn out_of_range_line_width_falls_back_to_the_default() {
+    let default = Configuration::default().line_width;
+    for width in ["0", "-3", "0.5", "1e9"] {
+        let (conf, _) = parse_config(&format!(r#"{{ "line_width": {width} }}"#)).unwrap();
+        assert_eq!(conf.line_width, default, "line_width {width}");
+    }
+    let (conf, _) = parse_config(r#"{ "line_width": 1 }"#).unwrap();
+    assert_eq!(conf.line_width, 1.0);
+}

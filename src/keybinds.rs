@@ -39,6 +39,11 @@ impl Binding {
         })
     }
 
+    /// How the binding reads in a tooltip, such as `Ctrl+Shift+Z`.
+    pub fn label(&self) -> String {
+        gtk::accelerator_get_label(self.key, self.modifiers).to_string()
+    }
+
     /// Whether a key press with this modifier state triggers the binding.
     pub fn matches(&self, keyval: Key, state: ModifierType) -> bool {
         if state & EXACT_MODIFIERS != self.modifiers & EXACT_MODIFIERS {
@@ -72,6 +77,7 @@ pub struct Keybinds {
     pub clear: Option<Binding>,
     pub copy: Option<Binding>,
     pub save: Option<Binding>,
+    pub quit: Option<Binding>,
 }
 
 /// Resolves one key, warning about names that do not parse.
@@ -106,6 +112,7 @@ impl Keybinds {
             clear: parse("clear", &k.clear),
             copy: parse("copy", &k.copy),
             save: parse("save", &k.save),
+            quit: parse("quit", &k.quit),
         }
     }
 }

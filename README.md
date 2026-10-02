@@ -30,7 +30,7 @@ Bind `chicolli` to a key in your compositor, for example:
 
 ## Use
 
-Draw with the left mouse button, pick tools and colors from the toolbar or the keys below, and right click to exit. Hold Shift to snap arrows to 45° steps and rectangles to squares.
+Draw with the left mouse button, pick tools and colors from the toolbar or the keys below, and right click, Escape or the toolbar's close button to exit. Hover a toolbar button to see its key. Hold Shift to snap arrows to 45° steps and rectangles to squares.
 
 | Key | Action |
 |---|---|
@@ -42,6 +42,7 @@ Draw with the left mouse button, pick tools and colors from the toolbar or the k
 | `Ctrl+x` | Clear (undo brings it back) |
 | `Ctrl+c` / `Ctrl+s` | Copy the screen with the drawing / save it as a PNG |
 | `d` | Pass-through: keep the drawing, use the desktop |
+| `Escape` | Quit (while typing a label, it finishes the label first) |
 
 With the text tool, click to place a label, type, Shift+Enter for a new line, Ctrl+V to paste, and Enter or Escape to finish. Click a label again to move it or keep typing.
 
@@ -72,12 +73,13 @@ Settings live in `~/.config/chicolli/chicolli.json`, created empty on first run.
     "redo": "<Ctrl><Shift>z",
     "clear": "<Ctrl>x",
     "copy": "<Ctrl>c",
-    "save": "<Ctrl>s"
+    "save": "<Ctrl>s",
+    "quit": "Escape"
   }
 }
 ```
 
-A key is a GTK key name (`"a"`, `"F1"`, `"space"`), optionally with `<Ctrl>`, `<Shift>`, `<Alt>` or `<Super>` in front, like `"<Ctrl><Shift>z"`. An empty string unbinds the action. Unknown keys and options, and files that are not valid JSON, are reported on stderr; a broken file keeps the previous settings. Config files from older versions (`draw_keybind`, `line_thickness`, ...) still work.
+A key is a GTK key name (`"a"`, `"F1"`, `"space"`), optionally with `<Ctrl>`, `<Shift>`, `<Alt>` or `<Super>` in front, like `"<Ctrl><Shift>z"`. An empty string unbinds the action. `line_width` can be 1 to 200. Unknown keys and options, and files that are not valid JSON, are reported on stderr; a broken file keeps the previous settings. Config files from older versions (`draw_keybind`, `line_thickness`, ...) still work.
 
 ## License
 
