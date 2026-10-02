@@ -19,6 +19,7 @@ pub mod config;
 pub mod cursors;
 pub mod drawing;
 pub mod geometry;
+pub mod history;
 pub mod keybinds;
 pub mod toolbar;
 
@@ -31,8 +32,9 @@ struct Element {
 }
 
 /// Everything drawn, on all monitors, oldest first, so Undo removes the latest
-/// element wherever it is.
-type Elements = Rc<RefCell<Vec<Element>>>;
+/// element wherever it is, with what Undo and Clear took away so Undo and Redo can
+/// bring it back.
+type Elements = Rc<RefCell<history::History<Element>>>;
 
 /// The fullscreen overlay window on one monitor.
 struct Canvas {
@@ -87,7 +89,8 @@ impl State {
     /// A label that ended up with no text is removed so Undo never pops something invisible.
     fn end_text_input(&self) {
         *self.text_input_mode.borrow_mut() = false;
-        let mut elems = self.elements.borrow_mut();
+        let mut history = self.elements.borrow_mut();
+        let elems = history.items_mut();
         let Some(elem) = elems.last_mut() else {
             return;
         };
@@ -105,6 +108,7 @@ impl State {
             elems.pop();
         } else {
             label.commit();
+            history.commit();
         }
     }
 
@@ -115,6 +119,7 @@ impl State {
     ) -> Option<R> {
         let mut elems = self.elements.borrow_mut();
         let label = elems
+            .items_mut()
             .last_mut()?
             .tool
             .as_any_mut()
@@ -124,7 +129,7 @@ impl State {
 
     /// Applies the Shift constraint to the element currently being drawn.
     fn constrain_active(&self, shift: bool) {
-        if let Some(elem) = self.elements.borrow_mut().last_mut() {
+        if let Some(elem) = self.elements.borrow_mut().items_mut().last_mut() {
             if elem.tool.active() {
                 elem.tool.set_constrained(shift);
             }
@@ -147,14 +152,36 @@ impl State {
         self.toolbar.update(&tool, &col, *self.line_width.borrow());
     }
 
+    /// Takes back the latest element or Clear. Undo while typing into a new, still empty
+    /// label just drops that label.
     fn undo(&self) {
-        *self.text_input_mode.borrow_mut() = false;
-        self.elements.borrow_mut().pop();
+        let typing_nothing = self.with_editing_label(|label| label.is_empty()) == Some(true);
+        self.end_text_input();
+        if !typing_nothing {
+            self.elements.borrow_mut().undo();
+        }
         self.redraw();
     }
 
+    fn redo(&self) {
+        self.end_text_input();
+        // Not in the middle of a drag: the element being drawn has to stay last.
+        let mut history = self.elements.borrow_mut();
+        if history
+            .items_mut()
+            .last_mut()
+            .is_some_and(|e| e.tool.active())
+        {
+            return;
+        }
+        history.redo();
+        drop(history);
+        self.redraw();
+    }
+
+    /// Removes everything; Undo brings it back.
     fn clear(&self) {
-        *self.text_input_mode.borrow_mut() = false;
+        self.end_text_input();
         self.elements.borrow_mut().clear();
         self.redraw();
     }
@@ -420,13 +447,18 @@ impl State {
                 // While a button is held the pressed overlay keeps getting the motion,
                 // also past its monitor's edge, so the element follows the pointer
                 // onto the other monitors.
-                let active = state.elements.borrow_mut().last_mut().is_some_and(|elem| {
-                    if elem.tool.active() {
-                        elem.tool.set_constrained(shift);
-                    }
-                    elem.tool.motion_notify(origin(&monitor) + Point(x, y));
-                    elem.tool.active()
-                });
+                let active = state
+                    .elements
+                    .borrow_mut()
+                    .items_mut()
+                    .last_mut()
+                    .is_some_and(|elem| {
+                        if elem.tool.active() {
+                            elem.tool.set_constrained(shift);
+                        }
+                        elem.tool.motion_notify(origin(&monitor) + Point(x, y));
+                        elem.tool.active()
+                    });
                 if active {
                     state.redraw();
                 }
@@ -472,7 +504,8 @@ impl State {
             monitor,
             move |_, _, x, y| {
                 {
-                    let mut elems = state.elements.borrow_mut();
+                    let mut history = state.elements.borrow_mut();
+                    let elems = history.items_mut();
                     let Some(elem) = elems.last_mut() else {
                         return;
                     };
@@ -480,9 +513,15 @@ impl State {
                         return;
                     }
                     elem.tool.release_mouse(origin(&monitor) + Point(x, y));
-                    // A click that drew nothing (e.g. an arrow without a drag) is dropped.
-                    if !elem.tool.active() && elem.tool.is_empty() {
-                        elems.pop();
+                    // A click that drew nothing (e.g. an arrow without a drag) is dropped
+                    // and leaves Redo as it was. Labels stay active, and count, until
+                    // typing ends.
+                    if !elem.tool.active() {
+                        if elem.tool.is_empty() {
+                            elems.pop();
+                        } else {
+                            history.commit();
+                        }
                     }
                 }
                 state.redraw();
@@ -528,7 +567,7 @@ impl State {
             move |_, ctx, _, _| {
                 let Point(x, y) = origin(&monitor);
                 ctx.translate(-x, -y);
-                for element in elements.borrow().iter() {
+                for element in elements.borrow().items() {
                     element.tool.draw(ctx);
                 }
             },
@@ -565,7 +604,8 @@ impl State {
         let current_tool = *self.current_tool.borrow();
         if current_tool == CurrentDrawingTool::TextLabel {
             // Clicking an existing label picks it up: drag to move it, type to extend it.
-            let mut elems = self.elements.borrow_mut();
+            let mut history = self.elements.borrow_mut();
+            let elems = history.items_mut();
             let hit = elems.iter_mut().rposition(|elem| {
                 elem.tool
                     .as_any_mut()
@@ -616,7 +656,7 @@ impl State {
             .contains(gtk::gdk::ModifierType::SHIFT_MASK)
             || *self.shift_held.borrow();
         drawing_tool.set_constrained(shift);
-        self.elements.borrow_mut().push(Element {
+        self.elements.borrow_mut().items_mut().push(Element {
             canvas: id,
             tool: drawing_tool,
         });
@@ -709,6 +749,7 @@ impl State {
             _ if hit(keys.red) => *self.color.borrow_mut() = colors::RED,
             _ if hit(keys.green) => *self.color.borrow_mut() = colors::GREEN,
             _ if hit(keys.blue) => *self.color.borrow_mut() = colors::BLUE,
+            _ if hit(keys.redo) => self.redo(),
             _ if hit(keys.undo) => self.undo(),
             _ if hit(keys.clear) => self.clear(),
             _ if hit(keys.color_chooser) => {
@@ -784,6 +825,12 @@ impl State {
             move || state.undo(),
         ));
 
+        toolbar.connect_redo(glib::clone!(
+            #[strong(rename_to = state)]
+            self,
+            move || state.redo(),
+        ));
+
         toolbar.connect_clear(glib::clone!(
             #[strong(rename_to = state)]
             self,
@@ -815,7 +862,7 @@ fn activate(application: &gtk::Application) {
         keybinds: Rc::new(Cell::new(keybinds::Keybinds::from_config(&conf))),
         conf: Rc::new(RefCell::new(conf)),
         config_monitor: Rc::new(RefCell::new(None)),
-        elements: Rc::new(RefCell::new(Vec::new())),
+        elements: Rc::new(RefCell::new(history::History::new())),
         color: Rc::new(RefCell::new(colors::RED)),
         current_tool: Rc::new(RefCell::new(CurrentDrawingTool::NormalLine)),
         line_width: Rc::new(RefCell::new(line_width)),

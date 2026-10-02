@@ -68,6 +68,7 @@ pub struct Keybinds {
     pub blue: Option<Binding>,
     pub color_chooser: Option<Binding>,
     pub undo: Option<Binding>,
+    pub redo: Option<Binding>,
     pub clear: Option<Binding>,
 }
 
@@ -99,6 +100,7 @@ impl Keybinds {
             blue: parse("blue", &k.blue),
             color_chooser: parse("color_chooser", &k.color_chooser),
             undo: parse("undo", &k.undo),
+            redo: parse("redo", &k.redo),
             clear: parse("clear", &k.clear),
         }
     }

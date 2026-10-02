@@ -24,6 +24,7 @@ const COLOR_PRESETS: [(gtk::gdk::RGBA, &str); 4] = [
 #[derive(Clone, Copy)]
 enum ActionIcon {
     Undo,
+    Redo,
     Clear,
     PassThrough,
 }
@@ -54,6 +55,7 @@ pub struct Toolbar {
     width_preview: gtk::DrawingArea,
     preview_width: Rc<Cell<f64>>,
     undo_btn: gtk::Button,
+    redo_btn: gtk::Button,
     clear_btn: gtk::Button,
     pass_through_btn: gtk::ToggleButton,
 }
@@ -200,8 +202,12 @@ fn draw_action_icon(ctx: &cairo::Context, icon: ActionIcon, fg: &gtk::gdk::RGBA,
     ctx.set_line_join(cairo::LineJoin::Round);
 
     match icon {
-        ActionIcon::Undo => {
-            // Counter-clockwise hook ending in an arrowhead on the left.
+        ActionIcon::Undo | ActionIcon::Redo => {
+            // Counter-clockwise hook ending in an arrowhead on the left; Redo mirrors it.
+            if matches!(icon, ActionIcon::Redo) {
+                ctx.translate(s, 0.0);
+                ctx.scale(-1.0, 1.0);
+            }
             ctx.move_to(0.24 * s, 0.40 * s);
             ctx.line_to(0.62 * s, 0.40 * s);
             ctx.arc(0.62 * s, 0.58 * s, 0.18 * s, -PI / 2.0, PI / 2.0);
@@ -444,7 +450,9 @@ impl Toolbar {
         let action_group = make_group();
         let undo_btn = make_action_button(ActionIcon::Undo, "Undo");
         action_group.append(&undo_btn);
-        let clear_btn = make_action_button(ActionIcon::Clear, "Clear all");
+        let redo_btn = make_action_button(ActionIcon::Redo, "Redo");
+        action_group.append(&redo_btn);
+        let clear_btn = make_action_button(ActionIcon::Clear, "Clear all (Undo brings it back)");
         clear_btn.add_css_class("toolbar-danger-btn");
         action_group.append(&clear_btn);
         container.append(&action_group);
@@ -472,6 +480,7 @@ impl Toolbar {
             width_preview,
             preview_width,
             undo_btn,
+            redo_btn,
             clear_btn,
             pass_through_btn,
         }
@@ -534,6 +543,10 @@ impl Toolbar {
 
     pub fn connect_undo<F: Fn() + 'static>(&self, f: F) {
         self.undo_btn.connect_clicked(move |_| f());
+    }
+
+    pub fn connect_redo<F: Fn() + 'static>(&self, f: F) {
+        self.redo_btn.connect_clicked(move |_| f());
     }
 
     pub fn connect_clear<F: Fn() + 'static>(&self, f: F) {

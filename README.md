@@ -38,7 +38,8 @@ Draw with the left mouse button, pick tools and colors from the toolbar or the k
 | `4` `5` `6` | Rectangle, text, highlighter |
 | `r` `g` `b` `c` | Red, green, blue, color chooser |
 | Scroll wheel | Line width |
-| `Ctrl+z` / `Ctrl+x` | Undo / clear |
+| `Ctrl+z` / `Ctrl+Shift+z` | Undo / redo |
+| `Ctrl+x` | Clear (undo brings it back) |
 | `d` | Pass-through: keep the drawing, use the desktop |
 
 With the text tool, click to place a label, type, Shift+Enter for a new line, Ctrl+V to paste, and Enter or Escape to finish. Click a label again to move it or keep typing.
@@ -65,6 +66,7 @@ Settings live in `~/.config/chicolli/chicolli.json`, created empty on first run.
     "blue": "b",
     "color_chooser": "c",
     "undo": "<Ctrl>z",
+    "redo": "<Ctrl><Shift>z",
     "clear": "<Ctrl>x"
   }
 }

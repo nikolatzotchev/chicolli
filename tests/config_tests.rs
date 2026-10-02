@@ -47,11 +47,11 @@ fn new_names_win_over_old_ones() {
 
 #[test]
 fn unknown_options_are_reported() {
-    let content = r#"{ "line_widht": 3, "keys": { "undo": "<Ctrl>u", "redo": "y" } }"#;
+    let content = r#"{ "line_widht": 3, "keys": { "undo": "<Ctrl>u", "erase": "y" } }"#;
     let (_, unknown) = parse_config(content).unwrap();
     assert_eq!(
         unknown,
-        vec!["line_widht".to_string(), "keys.redo".to_string()]
+        vec!["line_widht".to_string(), "keys.erase".to_string()]
     );
 }
 
