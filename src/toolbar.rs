@@ -8,6 +8,7 @@ use std::rc::Rc;
 
 use crate::colors;
 use crate::drawing::drawing_tool::CurrentDrawingTool;
+use crate::keybinds::{Binding, Keybinds};
 
 const ICON_SIZE: i32 = 18;
 const PRESET_SIZE: i32 = 18;
@@ -27,6 +28,7 @@ enum ActionIcon {
     Redo,
     Clear,
     PassThrough,
+    Quit,
 }
 
 struct ToolButton {
@@ -58,6 +60,7 @@ pub struct Toolbar {
     redo_btn: gtk::Button,
     clear_btn: gtk::Button,
     pass_through_btn: gtk::ToggleButton,
+    quit_btn: gtk::Button,
 }
 
 impl Default for Toolbar {
@@ -247,6 +250,22 @@ fn draw_action_icon(ctx: &cairo::Context, icon: ActionIcon, fg: &gtk::gdk::RGBA,
             ctx.close_path();
             let _ = ctx.stroke();
         }
+        ActionIcon::Quit => {
+            // A cross: close chicolli.
+            ctx.move_to(0.26 * s, 0.26 * s);
+            ctx.line_to(0.74 * s, 0.74 * s);
+            ctx.move_to(0.74 * s, 0.26 * s);
+            ctx.line_to(0.26 * s, 0.74 * s);
+            let _ = ctx.stroke();
+        }
+    }
+}
+
+/// A tooltip naming the key that does the same, like "Undo (Ctrl+Z)".
+fn tooltip_with_key(tooltip: &str, binding: Option<Binding>) -> String {
+    match binding {
+        Some(binding) => format!("{tooltip} ({})", binding.label()),
+        None => tooltip.to_owned(),
     }
 }
 
@@ -463,6 +482,9 @@ impl Toolbar {
         );
         let mode_group = make_group();
         mode_group.append(&pass_through_btn);
+        let quit_btn = make_action_button(ActionIcon::Quit, "Quit");
+        quit_btn.add_css_class("toolbar-danger-btn");
+        mode_group.append(&quit_btn);
         container.append(&mode_group);
 
         Toolbar {
@@ -483,6 +505,7 @@ impl Toolbar {
             redo_btn,
             clear_btn,
             pass_through_btn,
+            quit_btn,
         }
     }
 
@@ -551,6 +574,61 @@ impl Toolbar {
 
     pub fn connect_clear<F: Fn() + 'static>(&self, f: F) {
         self.clear_btn.connect_clicked(move |_| f());
+    }
+
+    pub fn connect_quit<F: Fn() + 'static>(&self, f: F) {
+        self.quit_btn.connect_clicked(move |_| f());
+    }
+
+    /// Adds each button's key to its tooltip; called again when the keybinds change.
+    pub fn show_keybinds(&self, keys: &Keybinds) {
+        for tb in &self.tool_buttons {
+            let (name, binding) = match tb.tool {
+                CurrentDrawingTool::NormalLine => ("Pen", keys.pen),
+                CurrentDrawingTool::NormalArrowHeadPointer => ("Arrow", keys.arrow),
+                CurrentDrawingTool::NormalArrowHeadBase => ("Reverse arrow", keys.reverse_arrow),
+                CurrentDrawingTool::NormalRectangle => ("Rectangle", keys.rectangle),
+                CurrentDrawingTool::Highlighter => ("Highlighter", keys.highlighter),
+                CurrentDrawingTool::TextLabel => ("Text", keys.text),
+            };
+            tb.button
+                .set_tooltip_text(Some(&tooltip_with_key(name, binding)));
+        }
+        for (pb, (_, name)) in self.preset_buttons.iter().zip(COLOR_PRESETS) {
+            let binding = [
+                (colors::RED, keys.red),
+                (colors::GREEN, keys.green),
+                (colors::BLUE, keys.blue),
+            ]
+            .into_iter()
+            .find(|(color, _)| same_color(color, &pb.color))
+            .and_then(|(_, binding)| binding);
+            pb.button
+                .set_tooltip_text(Some(&tooltip_with_key(name, binding)));
+        }
+        let tips = [
+            (
+                self.swatch_btn.upcast_ref::<gtk::Widget>(),
+                "Current color (click to choose)",
+                keys.color_chooser,
+            ),
+            (self.undo_btn.upcast_ref(), "Undo", keys.undo),
+            (self.redo_btn.upcast_ref(), "Redo", keys.redo),
+            (
+                self.clear_btn.upcast_ref(),
+                "Clear all (Undo brings it back)",
+                keys.clear,
+            ),
+            (
+                self.pass_through_btn.upcast_ref(),
+                "Use the desktop, keep the drawing (click again to draw)",
+                keys.pass_through,
+            ),
+            (self.quit_btn.upcast_ref(), "Quit", keys.quit),
+        ];
+        for (widget, name, binding) in tips {
+            widget.set_tooltip_text(Some(&tooltip_with_key(name, binding)));
+        }
     }
 
     /// Called with the new state when the pass-through toggle is clicked.

@@ -30,6 +30,13 @@ fn default_keybinds_resolve_to_gtk_keys() {
     };
     assert_eq!(keys.copy, ctrl(Key::c));
     assert_eq!(keys.save, ctrl(Key::s));
+    assert_eq!(
+        keys.quit,
+        Some(Binding {
+            key: Key::Escape,
+            modifiers: ModifierType::empty(),
+        })
+    );
 }
 
 #[test]

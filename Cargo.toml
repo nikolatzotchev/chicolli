@@ -2,6 +2,14 @@
 name = "chicolli"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.92"
+description = "Draw arrows, boxes, highlights and text on top of your Wayland desktop"
+license = "MIT"
+repository = "https://github.com/nikolatzotchev/chicolli"
+readme = "README.md"
+keywords = ["wayland", "annotation", "drawing", "gtk4", "layer-shell"]
+categories = ["gui", "multimedia::images"]
+exclude = [".github/", "AGENTS.md", "shell.nix"]
 
 [dependencies.gtk]
 package = "gtk4"

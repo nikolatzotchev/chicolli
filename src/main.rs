@@ -266,7 +266,9 @@ impl State {
                 return;
             }
         };
-        self.keybinds.set(keybinds::Keybinds::from_config(&conf));
+        let keys = keybinds::Keybinds::from_config(&conf);
+        self.keybinds.set(keys);
+        self.toolbar.show_keybinds(&keys);
         if conf.line_width != self.conf.borrow().line_width {
             *self.line_width.borrow_mut() = conf.line_width;
             self.sync_ui();
@@ -537,10 +539,11 @@ impl State {
         right_click_mouse.set_button(gtk::gdk::ffi::GDK_BUTTON_SECONDARY as u32);
 
         // Assign your handler to an event of the gesture (e.g. the `pressed` event)
-        right_click_mouse.connect_pressed(|_, _, _, _| {
-            // exit the application
-            std::process::exit(0);
-        });
+        right_click_mouse.connect_pressed(glib::clone!(
+            #[strong(rename_to = state)]
+            self,
+            move |_, _, _, _| state.app.quit(),
+        ));
 
         draw.add_controller(right_click_mouse);
 
@@ -604,12 +607,8 @@ impl State {
             move |_, _, scroll| {
                 let width = {
                     let mut width = state.line_width.borrow_mut();
-                    let new_width = *width - scroll;
-                    *width = if new_width as i32 >= 1 {
-                        new_width
-                    } else {
-                        1.0
-                    };
+                    *width =
+                        (*width - scroll).clamp(config::MIN_LINE_WIDTH, config::MAX_LINE_WIDTH);
                     *width
                 };
                 if *state.text_input_mode.borrow() {
@@ -818,6 +817,7 @@ impl State {
             _ if hit(keys.clear) => self.clear(),
             _ if hit(keys.copy) => self.capture(Capture::Copy),
             _ if hit(keys.save) => self.capture(Capture::Save),
+            _ if hit(keys.quit) => self.app.quit(),
             _ if hit(keys.color_chooser) => {
                 let current = *self.color.borrow();
                 self.toolbar.open_color_chooser(&current);
@@ -876,7 +876,7 @@ impl State {
             move |delta| {
                 let width = {
                     let mut width = state.line_width.borrow_mut();
-                    *width = (*width + delta).max(1.0);
+                    *width = (*width + delta).clamp(config::MIN_LINE_WIDTH, config::MAX_LINE_WIDTH);
                     *width
                 };
                 state.with_editing_label(|label| label.set_line_width(width));
@@ -903,6 +903,12 @@ impl State {
             move || state.clear(),
         ));
 
+        toolbar.connect_quit(glib::clone!(
+            #[strong(rename_to = state)]
+            self,
+            move || state.app.quit(),
+        ));
+
         toolbar.connect_pass_through(glib::clone!(
             #[strong(rename_to = state)]
             self,
@@ -920,12 +926,14 @@ fn activate(application: &gtk::Application) {
     let conf = config::get_config();
     let line_width = conf.line_width;
 
+    let keys = keybinds::Keybinds::from_config(&conf);
     let toolbar = toolbar::Toolbar::new();
     toolbar.update(&CurrentDrawingTool::NormalLine, &colors::RED, line_width);
+    toolbar.show_keybinds(&keys);
 
     let state = State {
         app: application.clone(),
-        keybinds: Rc::new(Cell::new(keybinds::Keybinds::from_config(&conf))),
+        keybinds: Rc::new(Cell::new(keys)),
         conf: Rc::new(RefCell::new(conf)),
         config_monitor: Rc::new(RefCell::new(None)),
         elements: Rc::new(RefCell::new(history::History::new())),
@@ -972,8 +980,28 @@ fn activate(application: &gtk::Application) {
     ));
 }
 
+/// The application ID: GApplication uniqueness (a second launch reaching the running
+/// instance) and desktop notifications go by it.
+const APP_ID: &str = "io.github.nikolatzotchev.Chicolli";
+
 fn main() {
-    let application = gtk::Application::new(Some("sh.wmww.gtk-layer-example"), Default::default());
+    let application = gtk::Application::new(Some(APP_ID), Default::default());
+
+    application.add_main_option(
+        "version",
+        glib::Char::from(b'V'),
+        glib::OptionFlags::NONE,
+        glib::OptionArg::None,
+        "Print the version and exit",
+        None,
+    );
+    application.connect_handle_local_options(|_, options| {
+        if options.contains("version") {
+            println!("chicolli {}", env!("CARGO_PKG_VERSION"));
+            return std::ops::ControlFlow::Break(glib::ExitCode::SUCCESS);
+        }
+        std::ops::ControlFlow::Continue(())
+    });
 
     application.connect_activate(|app| {
         // A second launch only re-activates the existing overlay (see `activate`).
