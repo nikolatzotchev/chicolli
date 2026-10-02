@@ -40,9 +40,12 @@ Draw with the left mouse button, pick tools and colors from the toolbar or the k
 | Scroll wheel | Line width |
 | `Ctrl+z` / `Ctrl+Shift+z` | Undo / redo |
 | `Ctrl+x` | Clear (undo brings it back) |
+| `Ctrl+c` / `Ctrl+s` | Copy the screen with the drawing / save it as a PNG |
 | `d` | Pass-through: keep the drawing, use the desktop |
 
 With the text tool, click to place a label, type, Shift+Enter for a new line, Ctrl+V to paste, and Enter or Escape to finish. Click a label again to move it or keep typing.
+
+Copy and save take a screenshot of all monitors with your drawing on it, without the toolbar. Chicolli uses `grim` on wlroots compositors (Sway, Hyprland, Wayfire, ...) and falls back to the xdg-desktop-portal screenshot portal elsewhere. Saved pictures go to your pictures folder (`~/Pictures`) as `chicolli-<date>_<time>.png`. With `wl-copy` (from wl-clipboard) installed, a copied picture can still be pasted after Chicolli exits; without it, only while Chicolli runs.
 
 In pass-through mode only the toolbar takes clicks. Click its pointer toggle (or any tool), or run `chicolli` again, to get back to drawing with everything still there.
 
@@ -67,7 +70,9 @@ Settings live in `~/.config/chicolli/chicolli.json`, created empty on first run.
     "color_chooser": "c",
     "undo": "<Ctrl>z",
     "redo": "<Ctrl><Shift>z",
-    "clear": "<Ctrl>x"
+    "clear": "<Ctrl>x",
+    "copy": "<Ctrl>c",
+    "save": "<Ctrl>s"
   }
 }
 ```

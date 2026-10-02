@@ -22,6 +22,14 @@ fn default_keybinds_resolve_to_gtk_keys() {
             modifiers: ModifierType::CONTROL_MASK,
         })
     );
+    let ctrl = |key| {
+        Some(Binding {
+            key,
+            modifiers: ModifierType::CONTROL_MASK,
+        })
+    };
+    assert_eq!(keys.copy, ctrl(Key::c));
+    assert_eq!(keys.save, ctrl(Key::s));
 }
 
 #[test]
