@@ -53,6 +53,10 @@ pub fn screenshot(done: impl FnOnce(Screenshot) + 'static) {
 
 const PORTAL: &str = "org.freedesktop.portal.Desktop";
 const PORTAL_PATH: &str = "/org/freedesktop/portal/desktop";
+/// How long to wait for the portal's answer before giving up, so a portal that never
+/// answers (or a permission dialog nobody can reach under the overlay) does not block
+/// copy and save for good.
+const PORTAL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
 /// Asks xdg-desktop-portal for a non-interactive screenshot and reads the file it writes.
 fn portal_screenshot(done: impl FnOnce(Screenshot) + 'static) {
@@ -126,6 +130,21 @@ fn portal_request(bus: &gio::DBusConnection, done: impl FnOnce(Screenshot) + 'st
         ),
     ));
 
+    glib::timeout_add_local_once(
+        PORTAL_TIMEOUT,
+        glib::clone!(
+            #[strong]
+            subscription,
+            #[strong]
+            finish,
+            move || {
+                // A no-op if the portal already answered.
+                subscription.borrow_mut().take();
+                finish(Err("the screenshot portal did not answer".into()));
+            }
+        ),
+    );
+
     let options = HashMap::from([
         ("handle_token", token.to_variant()),
         ("interactive", false.to_variant()),
@@ -151,26 +170,39 @@ fn portal_request(bus: &gio::DBusConnection, done: impl FnOnce(Screenshot) + 'st
     );
 }
 
-/// Puts the PNG on the clipboard. `wl-copy` keeps serving it after chicolli exits, so it
-/// can be pasted once the overlay is closed; without it GTK's clipboard is used, which
-/// only lasts while chicolli runs (unless a clipboard manager takes it over).
-pub fn copy_to_clipboard(png: glib::Bytes, display: gtk::gdk::Display) {
+/// Puts the PNG on the clipboard and reports how that went. `wl-copy` keeps serving it
+/// after chicolli exits, so it can be pasted once the overlay is closed; without it GTK's
+/// clipboard is used, which only lasts while chicolli runs (unless a clipboard manager
+/// takes it over).
+pub fn copy_to_clipboard(
+    png: glib::Bytes,
+    display: gtk::gdk::Display,
+    done: impl FnOnce(Result<String, String>) + 'static,
+) {
     let gtk_clipboard = move |png: &glib::Bytes| match gtk::gdk::Texture::from_bytes(png) {
-        Ok(texture) => display.clipboard().set_texture(&texture),
-        Err(err) => eprintln!("chicolli: could not copy the screenshot: {err}"),
+        Ok(texture) => {
+            display.clipboard().set_texture(&texture);
+            Ok("Copied the screen to the clipboard until chicolli quits \
+                (install wl-clipboard to keep it after that)"
+                .to_owned())
+        }
+        Err(err) => Err(format!("copying to the clipboard: {err}")),
     };
     let wl_copy = gio::Subprocess::newv(
         &["wl-copy".as_ref(), "--type".as_ref(), "image/png".as_ref()],
         gio::SubprocessFlags::STDIN_PIPE,
     );
     let Ok(wl_copy) = wl_copy else {
-        return gtk_clipboard(&png);
+        return done(gtk_clipboard(&png));
     };
     wl_copy
         .clone()
         .communicate_async(Some(&png.clone()), gio::Cancellable::NONE, move |result| {
-            if result.is_err() || !wl_copy.is_successful() {
-                gtk_clipboard(&png);
+            if result.is_ok() && wl_copy.is_successful() {
+                done(Ok("Copied the screen to the clipboard".to_owned()));
+            } else {
+                eprintln!("chicolli: wl-copy failed, using GTK's clipboard instead");
+                done(gtk_clipboard(&png));
             }
         });
 }
