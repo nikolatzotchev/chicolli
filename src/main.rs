@@ -68,6 +68,9 @@ struct State {
     capturing: Rc<Cell<bool>>,
 }
 
+/// The id copy/save notifications share, so each replaces the one before.
+const CAPTURE_NOTIFICATION: &str = "chicolli-capture";
+
 /// What to do with a screenshot of the annotated desktop.
 #[derive(Clone, Copy)]
 enum Capture {
@@ -207,7 +210,10 @@ impl State {
         self.redraw();
         let toolbar = self.toolbar.widget().clone();
         toolbar.set_visible(false);
-        // Give the compositor a moment to show the overlays without the toolbar.
+        // The last copy/save notification would be in the picture too.
+        self.app.withdraw_notification(CAPTURE_NOTIFICATION);
+        // Give the compositor a moment to show the overlays without the toolbar and
+        // the notification.
         glib::timeout_add_local_once(
             std::time::Duration::from_millis(200),
             glib::clone!(
@@ -217,15 +223,19 @@ impl State {
                     capture::screenshot(move |png| {
                         toolbar.set_visible(true);
                         state.capturing.set(false);
-                        let result = png.and_then(|png| match what {
-                            Capture::Copy => {
-                                capture::copy_to_clipboard(png, display());
-                                Ok("Copied the screen to the clipboard".to_owned())
+                        match (png, what) {
+                            (Err(err), _) => state.notify(Err(err)),
+                            (Ok(png), Capture::Copy) => {
+                                let state = state.clone();
+                                capture::copy_to_clipboard(png, display(), move |result| {
+                                    state.notify(result)
+                                });
                             }
-                            Capture::Save => capture::save(&png)
-                                .map(|path| format!("Saved the screen to {}", path.display())),
-                        });
-                        state.notify(result);
+                            (Ok(png), Capture::Save) => state.notify(
+                                capture::save(&png)
+                                    .map(|path| format!("Saved the screen to {}", path.display())),
+                            ),
+                        }
                     })
                 },
             ),
@@ -247,7 +257,7 @@ impl State {
             }
         };
         self.app
-            .send_notification(Some("chicolli-capture"), &notification);
+            .send_notification(Some(CAPTURE_NOTIFICATION), &notification);
     }
 
     /// Re-reads the config file after it changed on disk. Keybinds always follow the file;
