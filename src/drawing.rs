@@ -4,4 +4,5 @@ pub mod eraser;
 pub mod highlighter;
 pub mod normal_line;
 pub mod normal_rectangle;
+pub mod selection;
 pub mod text_label;

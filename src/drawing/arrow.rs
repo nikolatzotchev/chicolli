@@ -1,9 +1,9 @@
 use std::any::Any;
 
 use crate::colors::{self, Color};
-use crate::geometry::arrow_head;
+use crate::geometry::{arrow_head, bounding_box, distance_to_segment};
 
-use super::drawing_tool::{report, set_source_color, snap_angle, DrawingTool, Point};
+use super::drawing_tool::{report, set_source_color, snap_angle, DrawingTool, Point, HIT_MARGIN};
 
 /// Half the opening angle of the arrowhead (about 33 degrees).
 const HEAD_HALF_ANGLE: f64 = 0.58067840828;
@@ -32,6 +32,19 @@ impl NormalArrow {
             color: colors::RED,
             constrained: false,
         }
+    }
+
+    /// The shaft and the two wings of the head, each as a segment ending at the tip.
+    fn strokes(&self) -> Option<[(Point, Point); 3]> {
+        let (start, end) = self.resolved_end()?;
+        let (tail, tip) = if self.direction_head_base {
+            (end, start)
+        } else {
+            (start, end)
+        };
+        let head_length = MIN_HEAD_LENGTH.max(self.line_width * HEAD_LENGTH_PER_WIDTH);
+        let (wing1, wing2) = arrow_head(tail, tip, head_length, HEAD_HALF_ANGLE)?;
+        Some([(tail, tip), (wing1, tip), (wing2, tip)])
     }
 
     fn resolved_end(&self) -> Option<(Point, Point)> {
@@ -64,17 +77,8 @@ impl DrawingTool for NormalArrow {
     }
 
     fn draw(&self, cnx: &gtk::cairo::Context) {
-        let Some((start, end)) = self.resolved_end() else {
-            return;
-        };
-        let (tail, tip) = if self.direction_head_base {
-            (end, start)
-        } else {
-            (start, end)
-        };
         // A click without a drag has no direction to point in.
-        let head_length = MIN_HEAD_LENGTH.max(self.line_width * HEAD_LENGTH_PER_WIDTH);
-        let Some((wing1, wing2)) = arrow_head(tail, tip, head_length, HEAD_HALF_ANGLE) else {
+        let Some([(tail, tip), (wing1, _), (wing2, _)]) = self.strokes() else {
             return;
         };
 
@@ -116,5 +120,24 @@ impl DrawingTool for NormalArrow {
             Some((start, end)) => start.0 == end.0 && start.1 == end.1,
             None => true,
         }
+    }
+
+    fn hit(&self, point: Point) -> bool {
+        self.strokes().is_some_and(|strokes| {
+            strokes.iter().any(|&(a, b)| {
+                distance_to_segment(point, a, b) <= self.line_width / 2.0 + HIT_MARGIN
+            })
+        })
+    }
+
+    fn translate(&mut self, by: Point) {
+        for p in [&mut self.start, &mut self.end].into_iter().flatten() {
+            *p = *p + by;
+        }
+    }
+
+    fn bounds(&self) -> Option<(Point, Point)> {
+        let [(tail, tip), (wing1, _), (wing2, _)] = self.strokes()?;
+        bounding_box(&[tail, tip, wing1, wing2], self.line_width / 2.0)
     }
 }

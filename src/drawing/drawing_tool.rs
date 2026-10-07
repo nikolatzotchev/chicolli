@@ -6,6 +6,9 @@ use crate::colors;
 use crate::geometry::spline_controls;
 pub use crate::geometry::{snap_angle, snap_square, Point};
 
+/// Extra distance around an element's ink that still counts as clicking on it.
+pub const HIT_MARGIN: f64 = 6.0;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CurrentDrawingTool {
     NormalLine,
@@ -15,6 +18,7 @@ pub enum CurrentDrawingTool {
     Highlighter,
     TextLabel,
     Eraser,
+    Select,
 }
 
 pub trait DrawingTool {
@@ -31,6 +35,22 @@ pub trait DrawingTool {
     /// no text). Such elements are dropped so Undo never removes something invisible.
     fn is_empty(&self) -> bool {
         false
+    }
+    /// Whether `point` is on what the element draws, give or take [`HIT_MARGIN`], so the
+    /// select tool can pick it up. Elements that cannot be picked up return false.
+    fn hit(&self, _point: Point) -> bool {
+        false
+    }
+    /// Whether the element wipes out what was drawn before it at `point` (the eraser), so
+    /// the select tool cannot pick up anything below it there.
+    fn erases(&self, _point: Point) -> bool {
+        false
+    }
+    /// Moves the whole element by `by`.
+    fn translate(&mut self, _by: Point) {}
+    /// Top-left and bottom-right corners of the box around what the element draws.
+    fn bounds(&self) -> Option<(Point, Point)> {
+        None
     }
 }
 

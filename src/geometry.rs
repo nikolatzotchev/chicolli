@@ -106,3 +106,41 @@ pub fn arrow_head(tail: Point, tip: Point, length: f64, half_angle: f64) -> Opti
     let wing = |a: f64| Point(tip.0 - length * a.cos(), tip.1 - length * a.sin());
     Some((wing(angle - half_angle), wing(angle + half_angle)))
 }
+
+/// Distance from `p` to the segment from `a` to `b`.
+pub fn distance_to_segment(p: Point, a: Point, b: Point) -> f64 {
+    let ab = b - a;
+    let len_sq = ab.0 * ab.0 + ab.1 * ab.1;
+    let t = if len_sq == 0.0 {
+        0.0
+    } else {
+        (((p.0 - a.0) * ab.0 + (p.1 - a.1) * ab.1) / len_sq).clamp(0.0, 1.0)
+    };
+    distance_sq(p, a + ab * t).sqrt()
+}
+
+/// Distance from `p` to the line through `points` (to the point itself for one point,
+/// infinite for none).
+pub fn distance_to_polyline(p: Point, points: &[Point]) -> f64 {
+    match points {
+        [] => f64::INFINITY,
+        [only] => distance_sq(p, *only).sqrt(),
+        _ => points
+            .windows(2)
+            .map(|w| distance_to_segment(p, w[0], w[1]))
+            .fold(f64::INFINITY, f64::min),
+    }
+}
+
+/// Top-left and bottom-right corners of the box around `points`, grown by `margin` on
+/// every side. `None` for no points.
+pub fn bounding_box(points: &[Point], margin: f64) -> Option<(Point, Point)> {
+    let (first, rest) = points.split_first()?;
+    let (min, max) = rest.iter().fold((*first, *first), |(min, max), p| {
+        (
+            Point(min.0.min(p.0), min.1.min(p.1)),
+            Point(max.0.max(p.0), max.1.max(p.1)),
+        )
+    });
+    Some((min - Point(margin, margin), max + Point(margin, margin)))
+}

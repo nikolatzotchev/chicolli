@@ -15,6 +15,8 @@ const PRESET_SIZE: i32 = 18;
 const SWATCH_SIZE: i32 = 24;
 const WIDTH_PREVIEW_SIZE: i32 = 22;
 
+const SELECT_TOOLTIP: &str = "Select: drag a shape to move it, click it to delete it";
+
 const COLOR_PRESETS: [(gtk::gdk::RGBA, &str); 4] = [
     (colors::RED, "Red"),
     (colors::GREEN, "Green"),
@@ -135,6 +137,26 @@ pub(crate) fn eraser_icon_path(ctx: &cairo::Context, s: f64) {
     ctx.line_to(x1, y1);
 }
 
+/// Adds the select tool's icon path (a cross with an arrowhead on each end, for moving)
+/// in an `s`-sized box, shared with the tool cursors.
+pub(crate) fn move_icon_path(ctx: &cairo::Context, s: f64) {
+    let (lo, mid, hi, head) = (0.18 * s, 0.5 * s, 0.82 * s, 0.12 * s);
+    ctx.move_to(lo, mid);
+    ctx.line_to(hi, mid);
+    ctx.move_to(mid, lo);
+    ctx.line_to(mid, hi);
+    for (tip, dx, dy) in [
+        ((lo, mid), 1.0, 0.0),
+        ((hi, mid), -1.0, 0.0),
+        ((mid, lo), 0.0, 1.0),
+        ((mid, hi), 0.0, -1.0),
+    ] {
+        ctx.move_to(tip.0 + dx * head + dy * head, tip.1 + dy * head + dx * head);
+        ctx.line_to(tip.0, tip.1);
+        ctx.line_to(tip.0 + dx * head - dy * head, tip.1 + dy * head - dx * head);
+    }
+}
+
 /// Draws a monochrome icon for `tool` in the widget's current foreground color.
 fn draw_tool_icon(ctx: &cairo::Context, tool: CurrentDrawingTool, fg: &gtk::gdk::RGBA, s: f64) {
     set_source(ctx, fg);
@@ -190,6 +212,10 @@ fn draw_tool_icon(ctx: &cairo::Context, tool: CurrentDrawingTool, fg: &gtk::gdk:
         }
         CurrentDrawingTool::Eraser => {
             eraser_icon_path(ctx, s);
+            let _ = ctx.stroke();
+        }
+        CurrentDrawingTool::Select => {
+            move_icon_path(ctx, s);
             let _ = ctx.stroke();
         }
         CurrentDrawingTool::TextLabel => {
@@ -369,6 +395,7 @@ impl Toolbar {
             (CurrentDrawingTool::Highlighter, "Highlighter"),
             (CurrentDrawingTool::TextLabel, "Text"),
             (CurrentDrawingTool::Eraser, "Eraser"),
+            (CurrentDrawingTool::Select, SELECT_TOOLTIP),
         ];
 
         let tool_group = make_group();
@@ -615,6 +642,7 @@ impl Toolbar {
                 CurrentDrawingTool::Highlighter => ("Highlighter", keys.highlighter),
                 CurrentDrawingTool::TextLabel => ("Text", keys.text),
                 CurrentDrawingTool::Eraser => ("Eraser", keys.eraser),
+                CurrentDrawingTool::Select => (SELECT_TOOLTIP, keys.select),
             };
             tb.button
                 .set_tooltip_text(Some(&tooltip_with_key(name, binding)));

@@ -1,5 +1,6 @@
 use chicolli::geometry::{
-    arrow_head, distance_sq, snap_angle, snap_square, spline_controls, Point,
+    arrow_head, bounding_box, distance_sq, distance_to_polyline, distance_to_segment, snap_angle,
+    snap_square, spline_controls, Point,
 };
 
 const EPSILON: f64 = 1e-9;
@@ -102,4 +103,32 @@ fn arrow_head_wings_trail_behind_the_tip() {
 #[test]
 fn arrow_head_without_direction_is_none() {
     assert!(arrow_head(Point(3.0, 3.0), Point(3.0, 3.0), 20.0, 0.5).is_none());
+}
+
+#[test]
+fn distance_to_segment_clamps_to_the_ends() {
+    let (a, b) = (Point(0.0, 0.0), Point(10.0, 0.0));
+    assert!((distance_to_segment(Point(5.0, 3.0), a, b) - 3.0).abs() < EPSILON);
+    assert!((distance_to_segment(Point(-4.0, 3.0), a, b) - 5.0).abs() < EPSILON);
+    assert!((distance_to_segment(Point(13.0, 4.0), a, b) - 5.0).abs() < EPSILON);
+    // A zero-length segment is a point.
+    assert!((distance_to_segment(Point(3.0, 4.0), a, a) - 5.0).abs() < EPSILON);
+}
+
+#[test]
+fn distance_to_polyline_takes_the_nearest_segment() {
+    let line = [Point(0.0, 0.0), Point(10.0, 0.0), Point(10.0, 10.0)];
+    assert!((distance_to_polyline(Point(12.0, 5.0), &line) - 2.0).abs() < EPSILON);
+    assert!((distance_to_polyline(Point(5.0, -1.0), &line) - 1.0).abs() < EPSILON);
+    assert!((distance_to_polyline(Point(3.0, 4.0), &line[..1]) - 5.0).abs() < EPSILON);
+    assert!(distance_to_polyline(Point(0.0, 0.0), &[]).is_infinite());
+}
+
+#[test]
+fn bounding_box_spans_every_point_plus_margin() {
+    let (min, max) =
+        bounding_box(&[Point(3.0, 8.0), Point(-1.0, 2.0), Point(5.0, 4.0)], 1.0).unwrap();
+    assert_point_close(min, Point(-2.0, 1.0));
+    assert_point_close(max, Point(6.0, 9.0));
+    assert!(bounding_box(&[], 1.0).is_none());
 }

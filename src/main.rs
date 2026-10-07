@@ -1,4 +1,5 @@
 use drawing::drawing_tool::{CurrentDrawingTool, DrawingTool, Point};
+use geometry::distance_sq;
 
 use gtk::gio;
 use gtk::glib::{self, Propagation};
@@ -30,6 +31,42 @@ pub mod toolbar;
 struct Element {
     canvas: u32,
     tool: Box<dyn DrawingTool>,
+}
+
+impl history::Movable for Element {
+    fn move_by(&mut self, by: Point) {
+        self.tool.translate(by);
+    }
+}
+
+/// Index of the element the select tool picks up at `point`: the topmost one drawn
+/// there, unless an eraser stroke above it wiped that spot clean.
+fn pick<'a>(
+    mut elements: impl DoubleEndedIterator<Item = &'a Element> + ExactSizeIterator,
+    point: Point,
+) -> Option<usize> {
+    let mut index = elements.len();
+    while let Some(element) = elements.next_back() {
+        index -= 1;
+        if element.tool.erases(point) {
+            return None;
+        }
+        if element.tool.hit(point) {
+            return Some(index);
+        }
+    }
+    None
+}
+
+/// An element picked up with the select tool, while the button is held.
+#[derive(Clone, Copy)]
+struct Drag {
+    index: usize,
+    /// Where the button went down.
+    start: Point,
+    /// Where the element has been moved to follow, once the pointer left the click
+    /// threshold; until then the press may still be a click, which deletes the element.
+    last: Option<Point>,
 }
 
 /// Everything drawn, on all monitors, oldest first, so Undo removes the latest
@@ -69,6 +106,7 @@ struct State {
     /// Where the pointer is over the overlays, in global layout coordinates, for the
     /// eraser's outline.
     pointer: Rc<Cell<Option<Point>>>,
+    drag: Rc<Cell<Option<Drag>>>,
 }
 
 /// The id copy/save notifications share, so each replaces the one before.
@@ -106,8 +144,7 @@ impl State {
     fn end_text_input(&self) {
         *self.text_input_mode.borrow_mut() = false;
         let mut history = self.elements.borrow_mut();
-        let elems = history.items_mut();
-        let Some(elem) = elems.last_mut() else {
+        let Some(elem) = history.last_mut() else {
             return;
         };
         let Some(label) = elem
@@ -121,7 +158,7 @@ impl State {
             return;
         }
         if label.is_empty() {
-            elems.pop();
+            history.pop();
         } else {
             label.commit();
             history.commit();
@@ -135,7 +172,6 @@ impl State {
     ) -> Option<R> {
         let mut elems = self.elements.borrow_mut();
         let label = elems
-            .items_mut()
             .last_mut()?
             .tool
             .as_any_mut()
@@ -145,11 +181,20 @@ impl State {
 
     /// Applies the Shift constraint to the element currently being drawn.
     fn constrain_active(&self, shift: bool) {
-        if let Some(elem) = self.elements.borrow_mut().items_mut().last_mut() {
+        if let Some(elem) = self.elements.borrow_mut().last_mut() {
             if elem.tool.active() {
                 elem.tool.set_constrained(shift);
             }
         }
+    }
+
+    /// Whether the overlays draw something at the pointer (the eraser's size, the
+    /// select tool's outline), so they need redrawing as it moves.
+    fn shows_pointer(&self) -> bool {
+        matches!(
+            *self.current_tool.borrow(),
+            CurrentDrawingTool::Eraser | CurrentDrawingTool::Select
+        )
     }
 
     fn redraw(&self) {
@@ -170,11 +215,79 @@ impl State {
         self.redraw();
     }
 
+    /// Drops the element picked up with the select tool where it is now. A move so far
+    /// is kept, as one undo step; a press that has not moved yet is not a click and
+    /// deletes nothing.
+    fn end_drag(&self) {
+        let Some(drag) = self.drag.take() else {
+            return;
+        };
+        if let Some(last) = drag
+            .last
+            .filter(|last| distance_sq(*last, drag.start) > 0.0)
+        {
+            self.elements
+                .borrow_mut()
+                .moved(drag.index, last - drag.start);
+        }
+    }
+
+    /// Picks up the topmost element under `point` with the select tool.
+    fn select_press(&self, point: Point) {
+        let hit = pick(self.elements.borrow().items(), point);
+        if let Some(index) = hit {
+            self.drag.set(Some(Drag {
+                index,
+                start: point,
+                last: None,
+            }));
+        }
+    }
+
+    /// Moves the element picked up with the select tool along with the pointer, once
+    /// the pointer has left the click threshold. Returns whether something is picked up.
+    fn select_motion(&self, point: Point) -> bool {
+        let Some(mut drag) = self.drag.get() else {
+            return false;
+        };
+        let from = match drag.last {
+            Some(last) => last,
+            None if distance_sq(point, drag.start)
+                < drawing::selection::DRAG_THRESHOLD * drawing::selection::DRAG_THRESHOLD =>
+            {
+                return true;
+            }
+            None => drag.start,
+        };
+        if let Some(elem) = self.elements.borrow_mut().get_mut(drag.index) {
+            elem.tool.translate(point - from);
+        }
+        drag.last = Some(point);
+        self.drag.set(Some(drag));
+        true
+    }
+
+    /// Lets go of the element picked up with the select tool: a drag leaves it where it
+    /// was moved to, a click deletes it. Both can be undone.
+    fn select_release(&self, point: Point) {
+        self.select_motion(point);
+        let Some(drag) = self.drag.get() else {
+            return;
+        };
+        if drag.last.is_some() {
+            self.end_drag();
+        } else {
+            self.drag.set(None);
+            self.elements.borrow_mut().delete(drag.index);
+        }
+    }
+
     /// Takes back the latest element or Clear. Undo while typing into a new, still empty
     /// label just drops that label.
     fn undo(&self) {
         let typing_nothing = self.with_editing_label(|label| label.is_empty()) == Some(true);
         self.end_text_input();
+        self.end_drag();
         if !typing_nothing {
             self.elements.borrow_mut().undo();
         }
@@ -183,13 +296,10 @@ impl State {
 
     fn redo(&self) {
         self.end_text_input();
+        self.end_drag();
         // Not in the middle of a drag: the element being drawn has to stay last.
         let mut history = self.elements.borrow_mut();
-        if history
-            .items_mut()
-            .last_mut()
-            .is_some_and(|e| e.tool.active())
-        {
+        if history.last_mut().is_some_and(|e| e.tool.active()) {
             return;
         }
         history.redo();
@@ -200,6 +310,7 @@ impl State {
     /// Removes everything; Undo brings it back.
     fn clear(&self) {
         self.end_text_input();
+        self.end_drag();
         self.elements.borrow_mut().clear();
         self.redraw();
     }
@@ -339,6 +450,8 @@ impl State {
     /// screen while clicks and keys go to the windows underneath; only the toolbar still
     /// takes clicks, so its pass-through toggle can switch back.
     fn set_pass_through(&self, on: bool) {
+        // The overlays may not see the button come up any more.
+        self.end_drag();
         self.toolbar.set_pass_through(on);
         for canvas in self.canvases.borrow().iter() {
             let window = &canvas.window;
@@ -410,6 +523,8 @@ impl State {
             gone
         };
         if !gone.is_empty() {
+            // Its index may not hold once elements go.
+            self.end_drag();
             self.elements
                 .borrow_mut()
                 .retain(|e| !gone.iter().any(|c| c.id == e.canvas));
@@ -518,7 +633,7 @@ impl State {
             self,
             move |_| {
                 state.pointer.set(None);
-                if *state.current_tool.borrow() == CurrentDrawingTool::Eraser {
+                if state.shows_pointer() {
                     state.redraw();
                 }
             },
@@ -537,22 +652,29 @@ impl State {
                     .current_event_state()
                     .contains(gtk::gdk::ModifierType::SHIFT_MASK);
                 *state.shift_held.borrow_mut() = shift;
+                // A grab that took the release away (a popover, the compositor) leaves
+                // the drag without its button.
+                if !ctrl
+                    .current_event_state()
+                    .contains(gtk::gdk::ModifierType::BUTTON1_MASK)
+                {
+                    state.end_drag();
+                }
+                if state.select_motion(point) {
+                    state.redraw();
+                    return;
+                }
                 // While a button is held the pressed overlay keeps getting the motion,
                 // also past its monitor's edge, so the element follows the pointer
                 // onto the other monitors.
-                let active = state
-                    .elements
-                    .borrow_mut()
-                    .items_mut()
-                    .last_mut()
-                    .is_some_and(|elem| {
-                        if elem.tool.active() {
-                            elem.tool.set_constrained(shift);
-                        }
-                        elem.tool.motion_notify(point);
-                        elem.tool.active()
-                    });
-                if active || *state.current_tool.borrow() == CurrentDrawingTool::Eraser {
+                let active = state.elements.borrow_mut().last_mut().is_some_and(|elem| {
+                    if elem.tool.active() {
+                        elem.tool.set_constrained(shift);
+                    }
+                    elem.tool.motion_notify(point);
+                    elem.tool.active()
+                });
+                if active || state.shows_pointer() {
                     state.redraw();
                 }
             },
@@ -597,22 +719,27 @@ impl State {
             #[strong]
             monitor,
             move |_, _, x, y| {
+                let point = origin(&monitor) + Point(x, y);
+                if state.drag.get().is_some() {
+                    state.select_release(point);
+                    state.redraw();
+                    return;
+                }
                 {
                     let mut history = state.elements.borrow_mut();
-                    let elems = history.items_mut();
-                    let Some(elem) = elems.last_mut() else {
+                    let Some(elem) = history.last_mut() else {
                         return;
                     };
                     if !elem.tool.active() {
                         return;
                     }
-                    elem.tool.release_mouse(origin(&monitor) + Point(x, y));
+                    elem.tool.release_mouse(point);
                     // A click that drew nothing (e.g. an arrow without a drag) is dropped
                     // and leaves Redo as it was. Labels stay active, and count, until
                     // typing ends.
                     if !elem.tool.active() {
                         if elem.tool.is_empty() {
-                            elems.pop();
+                            history.pop();
                         } else {
                             history.commit();
                         }
@@ -660,19 +787,42 @@ impl State {
             self.line_width,
             #[strong(rename_to = capturing)]
             self.capturing,
+            #[strong(rename_to = drag)]
+            self.drag,
             #[strong]
             monitor,
             move |_, ctx, _, _| {
                 let Point(x, y) = origin(&monitor);
                 ctx.translate(-x, -y);
-                for element in elements.borrow().items() {
+                let elements = elements.borrow();
+                for element in elements.items() {
                     element.tool.draw(ctx);
                 }
-                // Show how much the eraser takes, but keep it out of screenshots.
-                if *tool.borrow() == CurrentDrawingTool::Eraser && !capturing.get() {
-                    if let Some(point) = pointer.get() {
-                        drawing::eraser::draw_outline(ctx, point, *width.borrow());
+                // Tool feedback stays out of screenshots.
+                if capturing.get() {
+                    return;
+                }
+                match *tool.borrow() {
+                    // Show how much the eraser takes.
+                    CurrentDrawingTool::Eraser => {
+                        if let Some(point) = pointer.get() {
+                            drawing::eraser::draw_outline(ctx, point, *width.borrow());
+                        }
                     }
+                    // Outline what a click or drag would pick up, or has picked up.
+                    CurrentDrawingTool::Select => {
+                        let picked = match drag.get() {
+                            Some(drag) => Some(drag.index),
+                            None => pointer.get().and_then(|p| pick(elements.items(), p)),
+                        };
+                        if let Some(bounds) = picked
+                            .and_then(|i| elements.items().nth(i))
+                            .and_then(|e| e.tool.bounds())
+                        {
+                            drawing::selection::draw_outline(ctx, bounds);
+                        }
+                    }
+                    _ => {}
                 }
             },
         ));
@@ -705,12 +855,18 @@ impl State {
     fn press(&self, id: u32, draw: &gtk::DrawingArea, gesture: &gtk::GestureClick, point: Point) {
         // Clicking somewhere else ends typing into the previous label.
         self.end_text_input();
+        // A drag whose release never arrived ends where it is.
+        self.end_drag();
         let current_tool = *self.current_tool.borrow();
+        if current_tool == CurrentDrawingTool::Select {
+            self.select_press(point);
+            self.redraw();
+            return;
+        }
         if current_tool == CurrentDrawingTool::TextLabel {
             // Clicking an existing label picks it up: drag to move it, type to extend it.
             let mut history = self.elements.borrow_mut();
-            let elems = history.items_mut();
-            let hit = elems.iter_mut().rposition(|elem| {
+            let hit = history.rposition_mut(|elem| {
                 elem.tool
                     .as_any_mut()
                     .downcast_mut::<drawing::text_label::TextLabel>()
@@ -718,15 +874,14 @@ impl State {
             });
             if let Some(index) = hit {
                 // Move it to the end: the last element is the one being edited.
-                let mut elem = elems.remove(index);
-                if let Some(label) = elem
-                    .tool
-                    .as_any_mut()
-                    .downcast_mut::<drawing::text_label::TextLabel>()
-                {
+                history.raise(index);
+                if let Some(label) = history.last_mut().and_then(|elem| {
+                    elem.tool
+                        .as_any_mut()
+                        .downcast_mut::<drawing::text_label::TextLabel>()
+                }) {
                     label.edit_and_grab(point);
                 }
-                elems.push(elem);
                 *self.text_input_mode.borrow_mut() = true;
                 draw.grab_focus();
                 self.redraw();
@@ -746,6 +901,7 @@ impl State {
             }
             CurrentDrawingTool::Highlighter => Box::new(drawing::highlighter::Highlighter::new()),
             CurrentDrawingTool::Eraser => Box::new(drawing::eraser::Eraser::new()),
+            CurrentDrawingTool::Select => return,
             CurrentDrawingTool::TextLabel => {
                 *self.text_input_mode.borrow_mut() = true;
                 draw.grab_focus();
@@ -761,7 +917,7 @@ impl State {
             .contains(gtk::gdk::ModifierType::SHIFT_MASK)
             || *self.shift_held.borrow();
         drawing_tool.set_constrained(shift);
-        self.elements.borrow_mut().items_mut().push(Element {
+        self.elements.borrow_mut().push(Element {
             canvas: id,
             tool: drawing_tool,
         });
@@ -847,6 +1003,9 @@ impl State {
             }
             _ if hit(keys.eraser) => {
                 *self.current_tool.borrow_mut() = CurrentDrawingTool::Eraser;
+            }
+            _ if hit(keys.select) => {
+                *self.current_tool.borrow_mut() = CurrentDrawingTool::Select;
             }
             _ if hit(keys.pass_through) => {
                 self.end_text_input();
@@ -992,6 +1151,7 @@ fn activate(application: &gtk::Application) {
         next_canvas_id: Rc::new(Cell::new(0)),
         capturing: Rc::new(Cell::new(false)),
         pointer: Rc::new(Cell::new(None)),
+        drag: Rc::new(Cell::new(None)),
     };
     state.connect_toolbar();
     state.watch_config();

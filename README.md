@@ -37,6 +37,7 @@ Draw with the left mouse button, pick tools and colors from the toolbar or the k
 | `1` `2` `3` | Pen, arrow, reversed arrow |
 | `4` `5` `6` | Rectangle, text, highlighter |
 | `e` | Eraser |
+| `s` | Select: drag a shape to move it, click it to delete it |
 | `r` `g` `b` `c` | Red, green, blue, color chooser |
 | Scroll wheel | Line width (and eraser size) |
 | `Ctrl+z` / `Ctrl+Shift+z` | Undo / redo |
@@ -48,6 +49,8 @@ Draw with the left mouse button, pick tools and colors from the toolbar or the k
 With the text tool, click to place a label, type, Shift+Enter for a new line, Ctrl+V to paste, and Enter or Escape to finish. Click a label again to move it or keep typing.
 
 The eraser rubs out whatever is under it, down to the desktop, and a circle around the pointer shows how much it takes. It is four times the line width, so scroll or use the toolbar's width buttons to resize it. Undo brings back what it erased, and anything drawn afterwards goes on top.
+
+With the select tool, a dashed box shows which shape is under the pointer. Drag it to move it, or click it to delete it, without undoing what you drew after it. Undo takes back a move or a delete like any other step.
 
 Copy and save take a screenshot of all monitors with your drawing on it, without the toolbar. Chicolli uses `grim` on wlroots compositors (Sway, Hyprland, Wayfire, ...) and falls back to the xdg-desktop-portal screenshot portal elsewhere. Saved pictures go to your pictures folder (`~/Pictures`) as `chicolli-<date>_<time>.png`. With `wl-copy` (from wl-clipboard) installed, a copied picture can still be pasted after Chicolli exits; without it, only while Chicolli runs.
 
@@ -68,6 +71,7 @@ Settings live in `~/.config/chicolli/chicolli.json`, created empty on first run.
     "text": "5",
     "highlighter": "6",
     "eraser": "e",
+    "select": "s",
     "pass_through": "d",
     "red": "r",
     "green": "g",

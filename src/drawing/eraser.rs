@@ -3,6 +3,7 @@ use std::any::Any;
 use gtk::cairo::{Context, Operator};
 
 use crate::colors;
+use crate::geometry::distance_to_polyline;
 
 use super::drawing_tool::{report, stroke_smooth_path, DrawingTool, Point};
 use super::normal_line::Freehand;
@@ -88,5 +89,9 @@ impl DrawingTool for Eraser {
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
+    }
+
+    fn erases(&self, point: Point) -> bool {
+        distance_to_polyline(point, self.stroke.points()) <= self.line_width / 2.0
     }
 }
