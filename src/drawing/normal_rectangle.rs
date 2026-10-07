@@ -2,7 +2,9 @@ use std::any::Any;
 
 use crate::colors;
 
-use super::drawing_tool::{report, set_source_color, snap_square, DrawingTool, Point};
+use crate::geometry::{bounding_box, distance_to_polyline};
+
+use super::drawing_tool::{report, set_source_color, snap_square, DrawingTool, Point, HIT_MARGIN};
 
 pub struct NormalRectangle {
     start: Option<Point>,
@@ -29,6 +31,13 @@ impl NormalRectangle {
             color: colors::RED,
             constrained: false,
         }
+    }
+
+    /// The corners in drawing order, closing back at the first.
+    fn outline(&self) -> Option<[Point; 5]> {
+        let (a, c) = self.resolved_end()?;
+        let (b, d) = (Point(c.0, a.1), Point(a.0, c.1));
+        Some([a, b, c, d, a])
     }
 
     fn resolved_end(&self) -> Option<(Point, Point)> {
@@ -102,5 +111,21 @@ impl DrawingTool for NormalRectangle {
             Some((start, end)) => start.0 == end.0 && start.1 == end.1,
             None => true,
         }
+    }
+
+    fn hit(&self, point: Point) -> bool {
+        self.outline().is_some_and(|outline| {
+            distance_to_polyline(point, &outline) <= self.line_width / 2.0 + HIT_MARGIN
+        })
+    }
+
+    fn translate(&mut self, by: Point) {
+        for p in [&mut self.start, &mut self.end].into_iter().flatten() {
+            *p = *p + by;
+        }
+    }
+
+    fn bounds(&self) -> Option<(Point, Point)> {
+        bounding_box(&self.outline()?, self.line_width / 2.0)
     }
 }

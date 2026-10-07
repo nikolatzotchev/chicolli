@@ -3,9 +3,9 @@ use std::any::Any;
 use gtk::cairo::Context;
 
 use crate::colors;
-use crate::geometry::distance_sq;
+use crate::geometry::{bounding_box, distance_sq, distance_to_polyline};
 
-use super::drawing_tool::{set_source_color, stroke_smooth_path, DrawingTool, Point};
+use super::drawing_tool::{set_source_color, stroke_smooth_path, DrawingTool, Point, HIT_MARGIN};
 
 /// Motion events closer than this (in px) to the last kept point are skipped, so pointer
 /// jitter does not put tiny wiggles into the spline.
@@ -79,6 +79,21 @@ impl Freehand {
     pub fn points(&self) -> &[Point] {
         &self.points
     }
+
+    pub fn translate(&mut self, by: Point) {
+        for p in &mut self.points {
+            *p = *p + by;
+        }
+    }
+
+    /// Whether `point` is on the stroke drawn `width` wide.
+    pub fn hit(&self, point: Point, width: f64) -> bool {
+        distance_to_polyline(point, &self.points) <= width / 2.0 + HIT_MARGIN
+    }
+
+    pub fn bounds(&self, width: f64) -> Option<(Point, Point)> {
+        bounding_box(&self.points, width / 2.0)
+    }
 }
 
 pub struct NormalLine {
@@ -135,5 +150,17 @@ impl DrawingTool for NormalLine {
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
+    }
+
+    fn hit(&self, point: Point) -> bool {
+        self.stroke.hit(point, self.line_width)
+    }
+
+    fn translate(&mut self, by: Point) {
+        self.stroke.translate(by);
+    }
+
+    fn bounds(&self) -> Option<(Point, Point)> {
+        self.stroke.bounds(self.line_width)
     }
 }

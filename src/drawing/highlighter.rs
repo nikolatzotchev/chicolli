@@ -70,4 +70,16 @@ impl DrawingTool for Highlighter {
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
+
+    fn hit(&self, point: Point) -> bool {
+        self.stroke.hit(point, self.line_width)
+    }
+
+    fn translate(&mut self, by: Point) {
+        self.stroke.translate(by);
+    }
+
+    fn bounds(&self) -> Option<(Point, Point)> {
+        self.stroke.bounds(self.line_width)
+    }
 }

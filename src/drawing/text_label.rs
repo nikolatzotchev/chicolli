@@ -6,14 +6,12 @@ use gtk::pango;
 
 use crate::colors;
 
-use super::drawing_tool::{report, set_source_color, DrawingTool, Point};
+use super::drawing_tool::{report, set_source_color, DrawingTool, Point, HIT_MARGIN};
 
 /// Font size in points is `FONT_SIZE_BASE + line_width * FONT_SIZE_PER_WIDTH`, so each
 /// scroll step changes the size noticeably without jumping straight to huge text.
 const FONT_SIZE_BASE: f64 = 12.0;
 const FONT_SIZE_PER_WIDTH: f64 = 3.0;
-/// Extra margin around a label that still counts as clicking on it.
-const HIT_MARGIN: f64 = 6.0;
 
 /// Screen-space box of a drawn label: x, y, width, height.
 type Bounds = (f64, f64, f64, f64);
@@ -220,5 +218,24 @@ impl DrawingTool for TextLabel {
 
     fn is_empty(&self) -> bool {
         self.text.is_empty()
+    }
+
+    fn hit(&self, point: Point) -> bool {
+        self.contains(point)
+    }
+
+    fn translate(&mut self, by: Point) {
+        if let Some(pos) = &mut self.position {
+            *pos = *pos + by;
+        }
+        // Keep the box in step until the next draw measures it again.
+        if let Some((x, y, w, h)) = self.bounds.get() {
+            self.bounds.set(Some((x + by.0, y + by.1, w, h)));
+        }
+    }
+
+    fn bounds(&self) -> Option<(Point, Point)> {
+        let (x, y, w, h) = self.bounds.get()?;
+        Some((Point(x, y), Point(x + w, y + h)))
     }
 }

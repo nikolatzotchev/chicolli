@@ -18,7 +18,7 @@ use gtk::prelude::*;
 
 use crate::colors::Color;
 use crate::drawing::drawing_tool::CurrentDrawingTool;
-use crate::toolbar::{arrow_icon_path, eraser_icon_path, rectangle_icon_path};
+use crate::toolbar::{arrow_icon_path, eraser_icon_path, move_icon_path, rectangle_icon_path};
 
 /// Side of the design grid every shape below is drawn on.
 const GRID: f64 = 32.0;
@@ -43,6 +43,7 @@ enum Shape {
     Rectangle,
     Text,
     Eraser,
+    Select,
 }
 
 impl Shape {
@@ -59,6 +60,7 @@ impl Shape {
             CurrentDrawingTool::NormalRectangle => Shape::Rectangle,
             CurrentDrawingTool::TextLabel => Shape::Text,
             CurrentDrawingTool::Eraser => Shape::Eraser,
+            CurrentDrawingTool::Select => Shape::Select,
         }
     }
 
@@ -70,7 +72,7 @@ impl Shape {
         match self {
             Shape::Pen => (4, 27),
             Shape::Highlighter => (5, 26),
-            Shape::Arrow { .. } | Shape::Rectangle | Shape::Eraser => (12, 12),
+            Shape::Arrow { .. } | Shape::Rectangle | Shape::Eraser | Shape::Select => (12, 12),
             Shape::Text => (15, 15),
         }
     }
@@ -95,6 +97,10 @@ impl Shape {
             Shape::Eraser => {
                 paint_crosshair(cr, x, y);
                 paint_badge(cr, true, eraser_icon_path);
+            }
+            Shape::Select => {
+                paint_crosshair(cr, x, y);
+                paint_badge(cr, false, move_icon_path);
             }
         }
     }
@@ -419,7 +425,7 @@ impl ToolCursor {
 mod tests {
     use super::*;
 
-    const SHAPES: [Shape; 7] = [
+    const SHAPES: [Shape; 8] = [
         Shape::Pen,
         Shape::Highlighter,
         Shape::Arrow {
@@ -431,6 +437,7 @@ mod tests {
         Shape::Rectangle,
         Shape::Text,
         Shape::Eraser,
+        Shape::Select,
     ];
 
     fn alpha_at(image: &mut Image, x: i32, y: i32) -> u8 {
