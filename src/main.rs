@@ -103,6 +103,8 @@ struct State {
     next_canvas_id: Rc<Cell<u32>>,
     /// A screenshot is being taken; further copy/save presses wait for it.
     capturing: Rc<Cell<bool>>,
+    /// slurp is picking a region, so the overlays take no input.
+    selecting_region: Rc<Cell<bool>>,
     /// Where the pointer is over the overlays, in global layout coordinates, for the
     /// eraser's outline.
     pointer: Rc<Cell<Option<Point>>>,
@@ -330,7 +332,15 @@ impl State {
     /// it to the clipboard or saves it in the pictures folder. With `region`, the user
     /// first drags out the part to take with `slurp`.
     fn capture(&self, what: Capture, region: bool) {
-        if self.capturing.replace(true) {
+        // A stroke still being drawn would never see its button come up once slurp
+        // has the pointer; take the region after letting go.
+        let drawing = !*self.text_input_mode.borrow()
+            && self
+                .elements
+                .borrow_mut()
+                .last_mut()
+                .is_some_and(|e| e.tool.active());
+        if (region && drawing) || self.capturing.replace(true) {
             return;
         }
         // Finish the label being typed so its caret is not in the picture.
@@ -341,6 +351,7 @@ impl State {
         toolbar.set_visible(false);
         if region {
             // slurp's own overlay has to get the pointer and keyboard (Escape cancels).
+            self.selecting_region.set(true);
             self.set_input(Input::None);
         }
         // The last copy/save notification would be in the picture too.
@@ -352,7 +363,14 @@ impl State {
             move |png: Option<capture::Screenshot>| {
                 toolbar.set_visible(true);
                 if region {
-                    state.set_input(Input::Drawing);
+                    state.selecting_region.set(false);
+                    state.set_input(if state.toolbar.pass_through() {
+                        Input::PassThrough
+                    } else {
+                        Input::Drawing
+                    });
+                    // slurp got the release of Ctrl+Shift.
+                    *state.shift_held.borrow_mut() = false;
                 }
                 state.capturing.set(false);
                 let subject = if region {
@@ -495,6 +513,10 @@ impl State {
         // The overlays may not see the button come up any more.
         self.end_drag();
         self.toolbar.set_pass_through(on);
+        // slurp keeps the input; the capture applies the toolbar's mode when it ends.
+        if self.selecting_region.get() {
+            return;
+        }
         self.set_input(if on {
             Input::PassThrough
         } else {
@@ -618,7 +640,9 @@ impl State {
         // Before the window is first realized, set it up to be a layer surface
         window.init_layer_shell();
         window.set_monitor(Some(&monitor));
-        let pass_through = self.toolbar.pass_through();
+        // A monitor plugged in during pass-through or while slurp picks a region must
+        // not catch clicks or keys.
+        let pass_through = self.toolbar.pass_through() || self.selecting_region.get();
         window.set_keyboard_mode(if pass_through {
             KeyboardMode::None
         } else {
@@ -884,7 +908,6 @@ impl State {
         window.set_visible(true);
 
         if pass_through {
-            // A monitor plugged in during pass-through must not catch clicks.
             if let Some(surface) = window.surface() {
                 surface.set_input_region(Some(&Region::create()));
             }
@@ -1204,6 +1227,7 @@ fn activate(application: &gtk::Application) {
         canvases: Rc::new(RefCell::new(Vec::new())),
         next_canvas_id: Rc::new(Cell::new(0)),
         capturing: Rc::new(Cell::new(false)),
+        selecting_region: Rc::new(Cell::new(false)),
         pointer: Rc::new(Cell::new(None)),
         drag: Rc::new(Cell::new(None)),
     };

@@ -27,31 +27,13 @@ type Done = Rc<RefCell<Option<Box<dyn FnOnce(Screenshot)>>>>;
 
 /// Takes a screenshot of every output and hands the PNG to `done`.
 pub fn screenshot(done: impl FnOnce(Screenshot) + 'static) {
-    let grim = gio::Subprocess::newv(
-        &["grim".as_ref(), "-".as_ref()],
-        gio::SubprocessFlags::STDOUT_PIPE | gio::SubprocessFlags::STDERR_PIPE,
-    );
-    let grim = match grim {
-        Ok(grim) => grim,
-        // Not installed: try the portal.
-        Err(_) => return portal_screenshot(done),
-    };
-    grim.clone()
-        .communicate_async(None, gio::Cancellable::NONE, move |result| match result {
-            Ok((Some(png), _)) if grim.is_successful() && !png.is_empty() => done(Ok(png)),
-            Ok((_, stderr)) => {
-                // E.g. a compositor without wlr-screencopy.
-                let message = stderr
-                    .map(|err| String::from_utf8_lossy(&err).trim().to_owned())
-                    .unwrap_or_default();
-                eprintln!("chicolli: grim failed ({message}), trying the screenshot portal");
-                portal_screenshot(done);
-            }
-            Err(err) => {
-                eprintln!("chicolli: grim failed ({err}), trying the screenshot portal");
-                portal_screenshot(done);
-            }
-        });
+    grim(&[], move |png| match png {
+        Ok(png) => done(Ok(png)),
+        Err(err) => {
+            eprintln!("chicolli: grim failed ({err}), trying the screenshot portal");
+            portal_screenshot(done);
+        }
+    });
 }
 
 /// Lets the user drag out a region with `slurp` and hands its geometry (`"x,y wxh"` in
@@ -63,65 +45,66 @@ pub fn select_region(done: impl FnOnce(Result<Option<String>, String>) + 'static
     );
     let slurp = match slurp {
         Ok(slurp) => slurp,
-        Err(_) => {
-            return done(Err(
-                "capturing a region needs slurp, which is not installed".into(),
-            ))
-        }
+        Err(err) => return done(Err(format!("capturing a region needs slurp ({err})"))),
     };
     slurp.clone().communicate_utf8_async(
         None,
         gio::Cancellable::NONE,
         move |result| match result {
-            Ok((stdout, _)) if slurp.is_successful() => {
-                let geometry = stdout.map(|out| out.trim().to_owned()).unwrap_or_default();
-                if geometry.is_empty() {
-                    done(Ok(None))
-                } else {
-                    done(Ok(Some(geometry)))
-                }
-            }
-            // slurp exits with 1 when the selection is cancelled (Escape or right click).
-            Ok(_) if slurp.has_exited() && slurp.exit_status() == 1 => done(Ok(None)),
-            Ok((_, stderr)) => done(Err(format!(
-                "slurp failed ({})",
-                stderr.map(|err| err.trim().to_owned()).unwrap_or_default()
-            ))),
+            Ok((stdout, stderr)) => done(slurp_outcome(
+                slurp.is_successful(),
+                stdout.as_deref().unwrap_or_default(),
+                stderr.as_deref().unwrap_or_default(),
+            )),
             Err(err) => done(Err(format!("slurp failed ({err})"))),
         },
     );
 }
 
+/// What slurp's exit means: the picked geometry, `None` when the selection was
+/// cancelled (Escape or a right click), or why slurp failed. slurp exits with 1 both
+/// when cancelled and on errors, so its message tells them apart.
+pub fn slurp_outcome(success: bool, stdout: &str, stderr: &str) -> Result<Option<String>, String> {
+    let geometry = stdout.trim();
+    if success {
+        Ok((!geometry.is_empty()).then(|| geometry.to_owned()))
+    } else if stderr.contains("selection cancelled") {
+        Ok(None)
+    } else {
+        Err(format!("slurp failed ({})", stderr.trim()))
+    }
+}
+
 /// Takes a screenshot of `geometry` (as `slurp` prints it) with `grim -g` and hands the
 /// PNG to `done`.
 pub fn screenshot_region(geometry: &str, done: impl FnOnce(Screenshot) + 'static) {
-    let grim = gio::Subprocess::newv(
-        &[
-            "grim".as_ref(),
-            "-g".as_ref(),
-            geometry.as_ref(),
-            "-".as_ref(),
-        ],
+    grim(&["-g", geometry], move |png| {
+        done(png.map_err(|err| format!("capturing a region needs grim ({err})")))
+    });
+}
+
+/// Runs `grim <args> -` and hands its PNG to `done`, or grim's error message.
+fn grim(args: &[&str], done: impl FnOnce(Screenshot) + 'static) {
+    let argv: Vec<&std::ffi::OsStr> = std::iter::once("grim")
+        .chain(args.iter().copied())
+        .chain(std::iter::once("-"))
+        .map(std::ffi::OsStr::new)
+        .collect();
+    let grim = match gio::Subprocess::newv(
+        &argv,
         gio::SubprocessFlags::STDOUT_PIPE | gio::SubprocessFlags::STDERR_PIPE,
-    );
-    let grim = match grim {
+    ) {
         Ok(grim) => grim,
-        Err(_) => {
-            return done(Err(
-                "capturing a region needs grim, which is not installed".into()
-            ))
-        }
+        Err(err) => return done(Err(err.to_string())),
     };
     grim.clone()
         .communicate_async(None, gio::Cancellable::NONE, move |result| match result {
             Ok((Some(png), _)) if grim.is_successful() && !png.is_empty() => done(Ok(png)),
-            Ok((_, stderr)) => done(Err(format!(
-                "grim failed ({})",
-                stderr
-                    .map(|err| String::from_utf8_lossy(&err).trim().to_owned())
-                    .unwrap_or_default()
-            ))),
-            Err(err) => done(Err(format!("grim failed ({err})"))),
+            // E.g. a compositor without wlr-screencopy.
+            Ok((_, stderr)) => done(Err(stderr
+                .map(|err| String::from_utf8_lossy(&err).trim().to_owned())
+                .unwrap_or_default())),
+            Err(err) => done(Err(err.to_string())),
         });
 }
 
