@@ -207,3 +207,26 @@ fn retain_drops_deleted_elements_too() {
     assert!(history.undo());
     assert!(history.is_empty());
 }
+
+#[test]
+fn a_move_of_an_element_that_is_gone_is_skipped() {
+    let mut history = drawn(&["a", "b"]);
+    history.get_mut(0).unwrap().move_by(Point(5.0, 0.0));
+    history.moved(0, Point(5.0, 0.0));
+    // Picking "a" up again to edit it makes it the newest step.
+    history.raise(0);
+    history.commit();
+
+    assert!(history.undo());
+    assert_eq!(names(&history), ["b"]);
+    // The move of "a" shows nothing now, so this Undo takes back "b".
+    assert!(history.undo());
+    assert!(history.is_empty());
+
+    assert!(history.redo());
+    assert_eq!(names(&history), ["b"]);
+    assert!(history.redo());
+    assert_eq!(names(&history), ["b", "a"]);
+    assert_eq!(position(&history, "a"), (5.0, 0.0));
+    assert!(!history.redo());
+}

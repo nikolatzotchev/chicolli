@@ -39,6 +39,25 @@ impl history::Movable for Element {
     }
 }
 
+/// Index of the element the select tool picks up at `point`: the topmost one drawn
+/// there, unless an eraser stroke above it wiped that spot clean.
+fn pick<'a>(
+    mut elements: impl DoubleEndedIterator<Item = &'a Element> + ExactSizeIterator,
+    point: Point,
+) -> Option<usize> {
+    let mut index = elements.len();
+    while let Some(element) = elements.next_back() {
+        index -= 1;
+        if element.tool.erases(point) {
+            return None;
+        }
+        if element.tool.hit(point) {
+            return Some(index);
+        }
+    }
+    None
+}
+
 /// An element picked up with the select tool, while the button is held.
 #[derive(Clone, Copy)]
 struct Drag {
@@ -203,7 +222,10 @@ impl State {
         let Some(drag) = self.drag.take() else {
             return;
         };
-        if let Some(last) = drag.last {
+        if let Some(last) = drag
+            .last
+            .filter(|last| distance_sq(*last, drag.start) > 0.0)
+        {
             self.elements
                 .borrow_mut()
                 .moved(drag.index, last - drag.start);
@@ -212,11 +234,7 @@ impl State {
 
     /// Picks up the topmost element under `point` with the select tool.
     fn select_press(&self, point: Point) {
-        let hit = self
-            .elements
-            .borrow()
-            .items()
-            .rposition(|e| e.tool.hit(point));
+        let hit = pick(self.elements.borrow().items(), point);
         if let Some(index) = hit {
             self.drag.set(Some(Drag {
                 index,
@@ -432,6 +450,8 @@ impl State {
     /// screen while clicks and keys go to the windows underneath; only the toolbar still
     /// takes clicks, so its pass-through toggle can switch back.
     fn set_pass_through(&self, on: bool) {
+        // The overlays may not see the button come up any more.
+        self.end_drag();
         self.toolbar.set_pass_through(on);
         for canvas in self.canvases.borrow().iter() {
             let window = &canvas.window;
@@ -632,6 +652,14 @@ impl State {
                     .current_event_state()
                     .contains(gtk::gdk::ModifierType::SHIFT_MASK);
                 *state.shift_held.borrow_mut() = shift;
+                // A grab that took the release away (a popover, the compositor) leaves
+                // the drag without its button.
+                if !ctrl
+                    .current_event_state()
+                    .contains(gtk::gdk::ModifierType::BUTTON1_MASK)
+                {
+                    state.end_drag();
+                }
                 if state.select_motion(point) {
                     state.redraw();
                     return;
@@ -785,9 +813,7 @@ impl State {
                     CurrentDrawingTool::Select => {
                         let picked = match drag.get() {
                             Some(drag) => Some(drag.index),
-                            None => pointer
-                                .get()
-                                .and_then(|p| elements.items().rposition(|e| e.tool.hit(p))),
+                            None => pointer.get().and_then(|p| pick(elements.items(), p)),
                         };
                         if let Some(bounds) = picked
                             .and_then(|i| elements.items().nth(i))
@@ -829,6 +855,8 @@ impl State {
     fn press(&self, id: u32, draw: &gtk::DrawingArea, gesture: &gtk::GestureClick, point: Point) {
         // Clicking somewhere else ends typing into the previous label.
         self.end_text_input();
+        // A drag whose release never arrived ends where it is.
+        self.end_drag();
         let current_tool = *self.current_tool.borrow();
         if current_tool == CurrentDrawingTool::Select {
             self.select_press(point);

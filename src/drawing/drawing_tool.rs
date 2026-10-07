@@ -41,6 +41,11 @@ pub trait DrawingTool {
     fn hit(&self, _point: Point) -> bool {
         false
     }
+    /// Whether the element wipes out what was drawn before it at `point` (the eraser), so
+    /// the select tool cannot pick up anything below it there.
+    fn erases(&self, _point: Point) -> bool {
+        false
+    }
     /// Moves the whole element by `by`.
     fn translate(&mut self, _by: Point) {}
     /// Top-left and bottom-right corners of the box around what the element draws.

@@ -204,9 +204,15 @@ impl<T: Movable> History<T> {
                     Undone::Delete { step, id }
                 }
                 Edit::Move { step, id, by } => {
-                    if let Some(i) = self.find(id) {
-                        self.items[i].item.move_by(-by);
-                    }
+                    let Some(i) = self.find(id) else {
+                        // The moved element is gone (undone after being picked up to edit,
+                        // or forgotten), so this step shows nothing: take back the one
+                        // before it too.
+                        self.undone.push(Undone::Move { step, id, by });
+                        self.undo();
+                        return true;
+                    };
+                    self.items[i].item.move_by(-by);
                     Undone::Move { step, id, by }
                 }
             },
@@ -232,10 +238,14 @@ impl<T: Movable> History<T> {
                 }
             }
             Some(Undone::Move { step, id, by }) => {
-                if let Some(i) = self.find(id) {
-                    self.items[i].item.move_by(by);
-                }
                 self.done.push(Edit::Move { step, id, by });
+                match self.find(id) {
+                    Some(i) => self.items[i].item.move_by(by),
+                    // Nothing to show, as in `undo`: redo the next step too.
+                    None => {
+                        self.redo();
+                    }
+                }
             }
             None => return false,
         }
