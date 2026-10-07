@@ -43,6 +43,7 @@ Draw with the left mouse button, pick tools and colors from the toolbar or the k
 | `Ctrl+z` / `Ctrl+Shift+z` | Undo / redo |
 | `Ctrl+x` | Clear (undo brings it back) |
 | `Ctrl+c` / `Ctrl+s` | Copy the screen with the drawing / save it as a PNG |
+| `Ctrl+Shift+c` / `Ctrl+Shift+s` | Drag out a region with `slurp`, then copy / save just that part |
 | `d` | Pass-through: keep the drawing, use the desktop |
 | `Escape` | Quit (while typing a label, it finishes the label first) |
 
@@ -53,6 +54,8 @@ The eraser rubs out whatever is under it, down to the desktop, and a circle arou
 With the select tool, a dashed box shows which shape is under the pointer. Drag it to move it, or click it to delete it, without undoing what you drew after it. Undo takes back a move or a delete like any other step.
 
 Copy and save take a screenshot of all monitors with your drawing on it, without the toolbar. Chicolli uses `grim` on wlroots compositors (Sway, Hyprland, Wayfire, ...) and falls back to the xdg-desktop-portal screenshot portal elsewhere. Saved pictures go to your pictures folder (`~/Pictures`) as `chicolli-<date>_<time>.png`. With `wl-copy` (from wl-clipboard) installed, a copied picture can still be pasted after Chicolli exits; without it, only while Chicolli runs.
+
+Ctrl+Shift+C and Ctrl+Shift+S let you pick the part to take first: drag a box with the mouse (Escape cancels), and only that box is copied or saved, drawing included. Region capture needs both `slurp` and `grim`.
 
 In pass-through mode only the toolbar takes clicks. Click its pointer toggle (or any tool), or run `chicolli` again, to get back to drawing with everything still there.
 
@@ -82,6 +85,8 @@ Settings live in `~/.config/chicolli/chicolli.json`, created empty on first run.
     "clear": "<Ctrl>x",
     "copy": "<Ctrl>c",
     "save": "<Ctrl>s",
+    "copy_region": "<Ctrl><Shift>c",
+    "save_region": "<Ctrl><Shift>s",
     "quit": "Escape"
   }
 }

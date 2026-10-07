@@ -79,6 +79,8 @@ pub struct Keybinds {
     pub clear: Option<Binding>,
     pub copy: Option<Binding>,
     pub save: Option<Binding>,
+    pub copy_region: Option<Binding>,
+    pub save_region: Option<Binding>,
     pub quit: Option<Binding>,
 }
 
@@ -116,6 +118,8 @@ impl Keybinds {
             clear: parse("clear", &k.clear),
             copy: parse("copy", &k.copy),
             save: parse("save", &k.save),
+            copy_region: parse("copy_region", &k.copy_region),
+            save_region: parse("save_region", &k.save_region),
             quit: parse("quit", &k.quit),
         }
     }

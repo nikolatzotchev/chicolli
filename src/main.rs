@@ -103,6 +103,8 @@ struct State {
     next_canvas_id: Rc<Cell<u32>>,
     /// A screenshot is being taken; further copy/save presses wait for it.
     capturing: Rc<Cell<bool>>,
+    /// slurp is picking a region, so the overlays take no input.
+    selecting_region: Rc<Cell<bool>>,
     /// Where the pointer is over the overlays, in global layout coordinates, for the
     /// eraser's outline.
     pointer: Rc<Cell<Option<Point>>>,
@@ -117,6 +119,17 @@ const CAPTURE_NOTIFICATION: &str = "chicolli-capture";
 enum Capture {
     Copy,
     Save,
+}
+
+/// Which input the overlays take.
+#[derive(Clone, Copy)]
+enum Input {
+    /// Everything: drawing mode.
+    Drawing,
+    /// Only clicks on the toolbar.
+    PassThrough,
+    /// Nothing, while slurp picks a region.
+    None,
 }
 
 /// Whether Shift is down after this key event. The event's modifier state is the one
@@ -316,46 +329,93 @@ impl State {
     }
 
     /// Screenshots the desktop with the drawing on it, without the toolbar, and copies
-    /// it to the clipboard or saves it in the pictures folder.
-    fn capture(&self, what: Capture) {
-        if self.capturing.replace(true) {
+    /// it to the clipboard or saves it in the pictures folder. With `region`, the user
+    /// first drags out the part to take with `slurp`.
+    fn capture(&self, what: Capture, region: bool) {
+        // A stroke still being drawn would never see its button come up once slurp
+        // has the pointer; take the region after letting go.
+        let drawing = !*self.text_input_mode.borrow()
+            && self
+                .elements
+                .borrow_mut()
+                .last_mut()
+                .is_some_and(|e| e.tool.active());
+        if (region && drawing) || self.capturing.replace(true) {
             return;
         }
         // Finish the label being typed so its caret is not in the picture.
         self.end_text_input();
+        self.end_drag();
         self.redraw();
         let toolbar = self.toolbar.widget().clone();
         toolbar.set_visible(false);
+        if region {
+            // slurp's own overlay has to get the pointer and keyboard (Escape cancels).
+            self.selecting_region.set(true);
+            self.set_input(Input::None);
+        }
         // The last copy/save notification would be in the picture too.
         self.app.withdraw_notification(CAPTURE_NOTIFICATION);
+
+        let finish = glib::clone!(
+            #[strong(rename_to = state)]
+            self,
+            move |png: Option<capture::Screenshot>| {
+                toolbar.set_visible(true);
+                if region {
+                    state.selecting_region.set(false);
+                    state.set_input(if state.toolbar.pass_through() {
+                        Input::PassThrough
+                    } else {
+                        Input::Drawing
+                    });
+                    // slurp got the release of Ctrl+Shift.
+                    *state.shift_held.borrow_mut() = false;
+                }
+                state.capturing.set(false);
+                let subject = if region {
+                    "the selection"
+                } else {
+                    "the screen"
+                };
+                match (png, what) {
+                    // The selection was cancelled.
+                    (None, _) => (),
+                    (Some(Err(err)), _) => state.notify(Err(err)),
+                    (Some(Ok(png)), Capture::Copy) => {
+                        let state = state.clone();
+                        capture::copy_to_clipboard(png, display(), subject, move |result| {
+                            state.notify(result)
+                        });
+                    }
+                    (Some(Ok(png)), Capture::Save) => state.notify(
+                        capture::save(&png)
+                            .map(|path| format!("Saved {subject} to {}", path.display())),
+                    ),
+                }
+            }
+        );
         // Give the compositor a moment to show the overlays without the toolbar and
         // the notification.
-        glib::timeout_add_local_once(
-            std::time::Duration::from_millis(200),
-            glib::clone!(
-                #[strong(rename_to = state)]
-                self,
-                move || {
-                    capture::screenshot(move |png| {
-                        toolbar.set_visible(true);
-                        state.capturing.set(false);
-                        match (png, what) {
-                            (Err(err), _) => state.notify(Err(err)),
-                            (Ok(png), Capture::Copy) => {
-                                let state = state.clone();
-                                capture::copy_to_clipboard(png, display(), move |result| {
-                                    state.notify(result)
-                                });
-                            }
-                            (Ok(png), Capture::Save) => state.notify(
-                                capture::save(&png)
-                                    .map(|path| format!("Saved the screen to {}", path.display())),
-                            ),
-                        }
-                    })
-                },
-            ),
-        );
+        glib::timeout_add_local_once(std::time::Duration::from_millis(200), move || {
+            if !region {
+                return capture::screenshot(move |png| finish(Some(png)));
+            }
+            capture::select_region(move |selection| match selection {
+                Ok(Some(geometry)) => {
+                    // And a moment for slurp's dimmed overlay to go away.
+                    glib::timeout_add_local_once(
+                        std::time::Duration::from_millis(100),
+                        move || capture::screenshot_region(&geometry, move |png| finish(Some(png))),
+                    );
+                }
+                Ok(None) => {
+                    eprintln!("chicolli: region selection cancelled");
+                    finish(None)
+                }
+                Err(err) => finish(Some(Err(err))),
+            });
+        });
     }
 
     /// Reports how a copy or save went, on stderr and as a desktop notification.
@@ -453,25 +513,36 @@ impl State {
         // The overlays may not see the button come up any more.
         self.end_drag();
         self.toolbar.set_pass_through(on);
+        // slurp keeps the input; the capture applies the toolbar's mode when it ends.
+        if self.selecting_region.get() {
+            return;
+        }
+        self.set_input(if on {
+            Input::PassThrough
+        } else {
+            Input::Drawing
+        });
+    }
+
+    /// Sets which input the overlays take: everything, only toolbar clicks, or nothing.
+    fn set_input(&self, input: Input) {
         for canvas in self.canvases.borrow().iter() {
             let window = &canvas.window;
-            window.set_keyboard_mode(if on {
-                KeyboardMode::None
-            } else {
-                KeyboardMode::Exclusive
+            window.set_keyboard_mode(match input {
+                Input::Drawing => KeyboardMode::Exclusive,
+                Input::PassThrough | Input::None => KeyboardMode::None,
             });
             if let Some(surface) = window.surface() {
-                let region = if !on {
-                    Region::create_rectangle(&RectangleInt::new(
+                let region = match input {
+                    Input::Drawing => Region::create_rectangle(&RectangleInt::new(
                         0,
                         0,
                         surface.width(),
                         surface.height(),
-                    ))
-                } else {
+                    )),
                     // Only the overlay holding the toolbar has bounds for it; the
                     // others let every click through.
-                    match self.toolbar.widget().compute_bounds(window) {
+                    Input::PassThrough => match self.toolbar.widget().compute_bounds(window) {
                         Some(b) => Region::create_rectangle(&RectangleInt::new(
                             b.x().floor() as i32,
                             b.y().floor() as i32,
@@ -479,7 +550,8 @@ impl State {
                             b.height().ceil() as i32,
                         )),
                         None => Region::create(),
-                    }
+                    },
+                    Input::None => Region::create(),
                 };
                 surface.set_input_region(Some(&region));
             }
@@ -568,7 +640,9 @@ impl State {
         // Before the window is first realized, set it up to be a layer surface
         window.init_layer_shell();
         window.set_monitor(Some(&monitor));
-        let pass_through = self.toolbar.pass_through();
+        // A monitor plugged in during pass-through or while slurp picks a region must
+        // not catch clicks or keys.
+        let pass_through = self.toolbar.pass_through() || self.selecting_region.get();
         window.set_keyboard_mode(if pass_through {
             KeyboardMode::None
         } else {
@@ -834,7 +908,6 @@ impl State {
         window.set_visible(true);
 
         if pass_through {
-            // A monitor plugged in during pass-through must not catch clicks.
             if let Some(surface) = window.surface() {
                 surface.set_input_region(Some(&Region::create()));
             }
@@ -1019,8 +1092,12 @@ impl State {
             _ if hit(keys.redo) => self.redo(),
             _ if hit(keys.undo) => self.undo(),
             _ if hit(keys.clear) => self.clear(),
-            _ if hit(keys.copy) => self.capture(Capture::Copy),
-            _ if hit(keys.save) => self.capture(Capture::Save),
+            // Before copy and save, which ignore Shift: with some keymaps Ctrl+Shift+S
+            // arrives as a lowercase `s`.
+            _ if hit(keys.copy_region) => self.capture(Capture::Copy, true),
+            _ if hit(keys.save_region) => self.capture(Capture::Save, true),
+            _ if hit(keys.copy) => self.capture(Capture::Copy, false),
+            _ if hit(keys.save) => self.capture(Capture::Save, false),
             _ if hit(keys.quit) => self.app.quit(),
             _ if hit(keys.color_chooser) => {
                 let current = *self.color.borrow();
@@ -1150,6 +1227,7 @@ fn activate(application: &gtk::Application) {
         canvases: Rc::new(RefCell::new(Vec::new())),
         next_canvas_id: Rc::new(Cell::new(0)),
         capturing: Rc::new(Cell::new(false)),
+        selecting_region: Rc::new(Cell::new(false)),
         pointer: Rc::new(Cell::new(None)),
         drag: Rc::new(Cell::new(None)),
     };
