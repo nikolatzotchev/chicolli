@@ -14,6 +14,7 @@ pub enum CurrentDrawingTool {
     NormalRectangle,
     Highlighter,
     TextLabel,
+    Eraser,
 }
 
 pub trait DrawingTool {

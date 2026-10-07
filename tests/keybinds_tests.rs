@@ -14,6 +14,7 @@ fn default_keybinds_resolve_to_gtk_keys() {
     };
     assert_eq!(keys.pen, plain(Key::_1));
     assert_eq!(keys.highlighter, plain(Key::_6));
+    assert_eq!(keys.eraser, plain(Key::e));
     assert_eq!(keys.pass_through, plain(Key::d));
     assert_eq!(
         keys.undo,

@@ -116,6 +116,25 @@ pub(crate) fn rectangle_icon_path(ctx: &cairo::Context, s: f64) {
     ctx.rectangle(0.16 * s, 0.26 * s, 0.68 * s, 0.48 * s);
 }
 
+/// Adds the eraser icon's path (a tilted eraser block with its sleeve line) in an
+/// `s`-sized box, shared with the tool cursors.
+pub(crate) fn eraser_icon_path(ctx: &cairo::Context, s: f64) {
+    let corners = [(0.18, 0.54), (0.48, 0.24), (0.76, 0.52), (0.46, 0.82)];
+    ctx.move_to(corners[0].0 * s, corners[0].1 * s);
+    for (x, y) in &corners[1..] {
+        ctx.line_to(x * s, y * s);
+    }
+    ctx.close_path();
+    // The sleeve: the rubber tip is the lower left part.
+    let along = |(ax, ay): (f64, f64), (bx, by): (f64, f64)| {
+        ((ax + 0.4 * (bx - ax)) * s, (ay + 0.4 * (by - ay)) * s)
+    };
+    let (x0, y0) = along(corners[0], corners[1]);
+    let (x1, y1) = along(corners[3], corners[2]);
+    ctx.move_to(x0, y0);
+    ctx.line_to(x1, y1);
+}
+
 /// Draws a monochrome icon for `tool` in the widget's current foreground color.
 fn draw_tool_icon(ctx: &cairo::Context, tool: CurrentDrawingTool, fg: &gtk::gdk::RGBA, s: f64) {
     set_source(ctx, fg);
@@ -167,6 +186,10 @@ fn draw_tool_icon(ctx: &cairo::Context, tool: CurrentDrawingTool, fg: &gtk::gdk:
             ctx.line_to(-0.10 * s, 0.12 * s);
             ctx.restore().ok();
             ctx.set_line_width(1.5);
+            let _ = ctx.stroke();
+        }
+        CurrentDrawingTool::Eraser => {
+            eraser_icon_path(ctx, s);
             let _ = ctx.stroke();
         }
         CurrentDrawingTool::TextLabel => {
@@ -345,6 +368,7 @@ impl Toolbar {
             (CurrentDrawingTool::NormalRectangle, "Rectangle"),
             (CurrentDrawingTool::Highlighter, "Highlighter"),
             (CurrentDrawingTool::TextLabel, "Text"),
+            (CurrentDrawingTool::Eraser, "Eraser"),
         ];
 
         let tool_group = make_group();
@@ -590,6 +614,7 @@ impl Toolbar {
                 CurrentDrawingTool::NormalRectangle => ("Rectangle", keys.rectangle),
                 CurrentDrawingTool::Highlighter => ("Highlighter", keys.highlighter),
                 CurrentDrawingTool::TextLabel => ("Text", keys.text),
+                CurrentDrawingTool::Eraser => ("Eraser", keys.eraser),
             };
             tb.button
                 .set_tooltip_text(Some(&tooltip_with_key(name, binding)));
