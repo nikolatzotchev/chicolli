@@ -2,8 +2,8 @@
 //!
 //! Every cursor shares one look: dark ink strokes inside a white halo with a faint dark
 //! rim, so it stays readable on light and dark backgrounds alike. The pen and highlighter
-//! show the current drawing color, and the arrow and rectangle cursors pair a precision
-//! crosshair with the same glyph as their toolbar button.
+//! show the current drawing color, and the arrow, rectangle and eraser cursors pair a
+//! precision crosshair with the same glyph as their toolbar button.
 //!
 //! Shapes are designed on a 32-unit grid and rendered at the device scale when GTK asks
 //! for it (the `hidpi-cursors` feature, GTK 4.16+), so they stay sharp on HiDPI outputs.
@@ -18,7 +18,7 @@ use gtk::prelude::*;
 
 use crate::colors::Color;
 use crate::drawing::drawing_tool::CurrentDrawingTool;
-use crate::toolbar::{arrow_icon_path, rectangle_icon_path};
+use crate::toolbar::{arrow_icon_path, eraser_icon_path, rectangle_icon_path};
 
 /// Side of the design grid every shape below is drawn on.
 const GRID: f64 = 32.0;
@@ -42,6 +42,7 @@ enum Shape {
     Arrow { pointing_right: bool },
     Rectangle,
     Text,
+    Eraser,
 }
 
 impl Shape {
@@ -57,6 +58,7 @@ impl Shape {
             },
             CurrentDrawingTool::NormalRectangle => Shape::Rectangle,
             CurrentDrawingTool::TextLabel => Shape::Text,
+            CurrentDrawingTool::Eraser => Shape::Eraser,
         }
     }
 
@@ -68,7 +70,7 @@ impl Shape {
         match self {
             Shape::Pen => (4, 27),
             Shape::Highlighter => (5, 26),
-            Shape::Arrow { .. } | Shape::Rectangle => (12, 12),
+            Shape::Arrow { .. } | Shape::Rectangle | Shape::Eraser => (12, 12),
             Shape::Text => (15, 15),
         }
     }
@@ -90,6 +92,10 @@ impl Shape {
                 paint_badge(cr, true, rectangle_icon_path);
             }
             Shape::Text => paint_ibeam(cr, x, y),
+            Shape::Eraser => {
+                paint_crosshair(cr, x, y);
+                paint_badge(cr, true, eraser_icon_path);
+            }
         }
     }
 }
@@ -413,7 +419,7 @@ impl ToolCursor {
 mod tests {
     use super::*;
 
-    const SHAPES: [Shape; 6] = [
+    const SHAPES: [Shape; 7] = [
         Shape::Pen,
         Shape::Highlighter,
         Shape::Arrow {
@@ -424,6 +430,7 @@ mod tests {
         },
         Shape::Rectangle,
         Shape::Text,
+        Shape::Eraser,
     ];
 
     fn alpha_at(image: &mut Image, x: i32, y: i32) -> u8 {

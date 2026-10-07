@@ -66,6 +66,9 @@ struct State {
     next_canvas_id: Rc<Cell<u32>>,
     /// A screenshot is being taken; further copy/save presses wait for it.
     capturing: Rc<Cell<bool>>,
+    /// Where the pointer is over the overlays, in global layout coordinates, for the
+    /// eraser's outline.
+    pointer: Rc<Cell<Option<Point>>>,
 }
 
 /// The id copy/save notifications share, so each replaces the one before.
@@ -163,6 +166,8 @@ impl State {
             canvas.cursor.show(tool, col);
         }
         self.toolbar.update(&tool, &col, *self.line_width.borrow());
+        // The eraser outline follows the tool and the width.
+        self.redraw();
     }
 
     /// Takes back the latest element or Clear. Undo while typing into a new, still empty
@@ -508,12 +513,24 @@ impl State {
                 }
             },
         ));
+        motion_controller.connect_leave(glib::clone!(
+            #[strong(rename_to = state)]
+            self,
+            move |_| {
+                state.pointer.set(None);
+                if *state.current_tool.borrow() == CurrentDrawingTool::Eraser {
+                    state.redraw();
+                }
+            },
+        ));
         motion_controller.connect_motion(glib::clone!(
             #[strong]
             monitor,
             #[strong(rename_to = state)]
             self,
             move |ctrl, x, y| {
+                let point = origin(&monitor) + Point(x, y);
+                state.pointer.set(Some(point));
                 // The pointer event's modifier state is authoritative: it also catches Shift
                 // pressed or released while keyboard focus was elsewhere.
                 let shift = ctrl
@@ -532,10 +549,10 @@ impl State {
                         if elem.tool.active() {
                             elem.tool.set_constrained(shift);
                         }
-                        elem.tool.motion_notify(origin(&monitor) + Point(x, y));
+                        elem.tool.motion_notify(point);
                         elem.tool.active()
                     });
-                if active {
+                if active || *state.current_tool.borrow() == CurrentDrawingTool::Eraser {
                     state.redraw();
                 }
             },
@@ -635,6 +652,14 @@ impl State {
         draw.set_draw_func(glib::clone!(
             #[weak(rename_to = elements)]
             self.elements,
+            #[strong(rename_to = tool)]
+            self.current_tool,
+            #[strong(rename_to = pointer)]
+            self.pointer,
+            #[strong(rename_to = width)]
+            self.line_width,
+            #[strong(rename_to = capturing)]
+            self.capturing,
             #[strong]
             monitor,
             move |_, ctx, _, _| {
@@ -642,6 +667,12 @@ impl State {
                 ctx.translate(-x, -y);
                 for element in elements.borrow().items() {
                     element.tool.draw(ctx);
+                }
+                // Show how much the eraser takes, but keep it out of screenshots.
+                if *tool.borrow() == CurrentDrawingTool::Eraser && !capturing.get() {
+                    if let Some(point) = pointer.get() {
+                        drawing::eraser::draw_outline(ctx, point, *width.borrow());
+                    }
                 }
             },
         ));
@@ -714,6 +745,7 @@ impl State {
                 Box::new(drawing::normal_rectangle::NormalRectangle::new())
             }
             CurrentDrawingTool::Highlighter => Box::new(drawing::highlighter::Highlighter::new()),
+            CurrentDrawingTool::Eraser => Box::new(drawing::eraser::Eraser::new()),
             CurrentDrawingTool::TextLabel => {
                 *self.text_input_mode.borrow_mut() = true;
                 draw.grab_focus();
@@ -813,6 +845,9 @@ impl State {
             _ if hit(keys.highlighter) => {
                 *self.current_tool.borrow_mut() = CurrentDrawingTool::Highlighter;
             }
+            _ if hit(keys.eraser) => {
+                *self.current_tool.borrow_mut() = CurrentDrawingTool::Eraser;
+            }
             _ if hit(keys.pass_through) => {
                 self.end_text_input();
                 self.redraw();
@@ -850,8 +885,8 @@ impl State {
                     state.set_pass_through(false);
                 }
                 state.end_text_input();
-                state.redraw();
                 *state.current_tool.borrow_mut() = tool;
+                state.redraw();
                 let col = *state.color.borrow();
                 for canvas in state.canvases.borrow().iter() {
                     canvas.cursor.show(tool, col);
@@ -956,6 +991,7 @@ fn activate(application: &gtk::Application) {
         canvases: Rc::new(RefCell::new(Vec::new())),
         next_canvas_id: Rc::new(Cell::new(0)),
         capturing: Rc::new(Cell::new(false)),
+        pointer: Rc::new(Cell::new(None)),
     };
     state.connect_toolbar();
     state.watch_config();
