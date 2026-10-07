@@ -4,6 +4,9 @@
 //! includes the drawing. `grim` (wlroots compositors: Sway, Hyprland, Wayfire, ...) is
 //! tried first because it is quick and never asks; when it is missing or fails, the
 //! xdg-desktop-portal Screenshot interface (KDE and other portals) is used instead.
+//!
+//! A region is picked with `slurp` and taken with `grim -g`; the portal cannot take a
+//! region without asking, so region capture needs both tools.
 
 use gtk::gio;
 use gtk::glib;
@@ -48,6 +51,77 @@ pub fn screenshot(done: impl FnOnce(Screenshot) + 'static) {
                 eprintln!("chicolli: grim failed ({err}), trying the screenshot portal");
                 portal_screenshot(done);
             }
+        });
+}
+
+/// Lets the user drag out a region with `slurp` and hands its geometry (`"x,y wxh"` in
+/// layout coordinates, as `grim -g` takes it) to `done`, or `None` when they cancelled.
+pub fn select_region(done: impl FnOnce(Result<Option<String>, String>) + 'static) {
+    let slurp = gio::Subprocess::newv(
+        &["slurp".as_ref()],
+        gio::SubprocessFlags::STDOUT_PIPE | gio::SubprocessFlags::STDERR_PIPE,
+    );
+    let slurp = match slurp {
+        Ok(slurp) => slurp,
+        Err(_) => {
+            return done(Err(
+                "capturing a region needs slurp, which is not installed".into(),
+            ))
+        }
+    };
+    slurp.clone().communicate_utf8_async(
+        None,
+        gio::Cancellable::NONE,
+        move |result| match result {
+            Ok((stdout, _)) if slurp.is_successful() => {
+                let geometry = stdout.map(|out| out.trim().to_owned()).unwrap_or_default();
+                if geometry.is_empty() {
+                    done(Ok(None))
+                } else {
+                    done(Ok(Some(geometry)))
+                }
+            }
+            // slurp exits with 1 when the selection is cancelled (Escape or right click).
+            Ok(_) if slurp.has_exited() && slurp.exit_status() == 1 => done(Ok(None)),
+            Ok((_, stderr)) => done(Err(format!(
+                "slurp failed ({})",
+                stderr.map(|err| err.trim().to_owned()).unwrap_or_default()
+            ))),
+            Err(err) => done(Err(format!("slurp failed ({err})"))),
+        },
+    );
+}
+
+/// Takes a screenshot of `geometry` (as `slurp` prints it) with `grim -g` and hands the
+/// PNG to `done`.
+pub fn screenshot_region(geometry: &str, done: impl FnOnce(Screenshot) + 'static) {
+    let grim = gio::Subprocess::newv(
+        &[
+            "grim".as_ref(),
+            "-g".as_ref(),
+            geometry.as_ref(),
+            "-".as_ref(),
+        ],
+        gio::SubprocessFlags::STDOUT_PIPE | gio::SubprocessFlags::STDERR_PIPE,
+    );
+    let grim = match grim {
+        Ok(grim) => grim,
+        Err(_) => {
+            return done(Err(
+                "capturing a region needs grim, which is not installed".into()
+            ))
+        }
+    };
+    grim.clone()
+        .communicate_async(None, gio::Cancellable::NONE, move |result| match result {
+            Ok((Some(png), _)) if grim.is_successful() && !png.is_empty() => done(Ok(png)),
+            Ok((_, stderr)) => done(Err(format!(
+                "grim failed ({})",
+                stderr
+                    .map(|err| String::from_utf8_lossy(&err).trim().to_owned())
+                    .unwrap_or_default()
+            ))),
+            Err(err) => done(Err(format!("grim failed ({err})"))),
         });
 }
 
@@ -177,14 +251,16 @@ fn portal_request(bus: &gio::DBusConnection, done: impl FnOnce(Screenshot) + 'st
 pub fn copy_to_clipboard(
     png: glib::Bytes,
     display: gtk::gdk::Display,
+    subject: &'static str,
     done: impl FnOnce(Result<String, String>) + 'static,
 ) {
     let gtk_clipboard = move |png: &glib::Bytes| match gtk::gdk::Texture::from_bytes(png) {
         Ok(texture) => {
             display.clipboard().set_texture(&texture);
-            Ok("Copied the screen to the clipboard until chicolli quits \
-                (install wl-clipboard to keep it after that)"
-                .to_owned())
+            Ok(format!(
+                "Copied {subject} to the clipboard until chicolli quits \
+                 (install wl-clipboard to keep it after that)"
+            ))
         }
         Err(err) => Err(format!("copying to the clipboard: {err}")),
     };
@@ -199,7 +275,7 @@ pub fn copy_to_clipboard(
         .clone()
         .communicate_async(Some(&png.clone()), gio::Cancellable::NONE, move |result| {
             if result.is_ok() && wl_copy.is_successful() {
-                done(Ok("Copied the screen to the clipboard".to_owned()));
+                done(Ok(format!("Copied {subject} to the clipboard")));
             } else {
                 eprintln!("chicolli: wl-copy failed, using GTK's clipboard instead");
                 done(gtk_clipboard(&png));

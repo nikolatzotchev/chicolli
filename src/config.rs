@@ -40,6 +40,10 @@ pub struct Keys {
     pub copy: String,
     /// Save the screen with the drawing as a PNG in the pictures folder.
     pub save: String,
+    /// Pick a region with slurp and copy it with the drawing to the clipboard.
+    pub copy_region: String,
+    /// Pick a region with slurp and save it with the drawing as a PNG.
+    pub save_region: String,
     /// Close chicolli. Escape only quits when no text label is being typed.
     pub quit: String,
 }
@@ -67,6 +71,8 @@ impl Default for Configuration {
                 clear: "<Ctrl>x".into(),
                 copy: "<Ctrl>c".into(),
                 save: "<Ctrl>s".into(),
+                copy_region: "<Ctrl><Shift>c".into(),
+                save_region: "<Ctrl><Shift>s".into(),
                 quit: "Escape".into(),
             },
         }
@@ -123,6 +129,8 @@ struct RawKeys {
     clear: Option<String>,
     copy: Option<String>,
     save: Option<String>,
+    copy_region: Option<String>,
+    save_region: Option<String>,
     quit: Option<String>,
     #[serde(flatten)]
     unknown: BTreeMap<String, serde_json::Value>,
@@ -183,6 +191,8 @@ pub fn parse_config(content: &str) -> Result<(Configuration, Vec<String>), serde
             clear: pick(k.clear, raw.clear_all.map(with_ctrl), d.keys.clear),
             copy: k.copy.unwrap_or(d.keys.copy),
             save: k.save.unwrap_or(d.keys.save),
+            copy_region: k.copy_region.unwrap_or(d.keys.copy_region),
+            save_region: k.save_region.unwrap_or(d.keys.save_region),
             quit: k.quit.unwrap_or(d.keys.quit),
         },
     };

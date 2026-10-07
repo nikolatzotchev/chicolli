@@ -32,6 +32,14 @@ fn default_keybinds_resolve_to_gtk_keys() {
     };
     assert_eq!(keys.copy, ctrl(Key::c));
     assert_eq!(keys.save, ctrl(Key::s));
+    let ctrl_shift = |key| {
+        Some(Binding {
+            key,
+            modifiers: ModifierType::CONTROL_MASK | ModifierType::SHIFT_MASK,
+        })
+    };
+    assert_eq!(keys.copy_region, ctrl_shift(Key::c));
+    assert_eq!(keys.save_region, ctrl_shift(Key::s));
     assert_eq!(
         keys.quit,
         Some(Binding {
