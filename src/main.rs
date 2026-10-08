@@ -1184,6 +1184,12 @@ impl State {
             move || state.clear(),
         ));
 
+        toolbar.connect_copy_region(glib::clone!(
+            #[strong(rename_to = state)]
+            self,
+            move || state.capture(Capture::Copy, true),
+        ));
+
         toolbar.connect_quit(glib::clone!(
             #[strong(rename_to = state)]
             self,
