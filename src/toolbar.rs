@@ -16,6 +16,7 @@ const SWATCH_SIZE: i32 = 24;
 const WIDTH_PREVIEW_SIZE: i32 = 22;
 
 const SELECT_TOOLTIP: &str = "Select: drag a shape to move it, click it to delete it";
+const COPY_REGION_TOOLTIP: &str = "Copy a region: drag out the part of the screen to copy";
 
 const COLOR_PRESETS: [(gtk::gdk::RGBA, &str); 4] = [
     (colors::RED, "Red"),
@@ -29,6 +30,7 @@ enum ActionIcon {
     Undo,
     Redo,
     Clear,
+    CopyRegion,
     PassThrough,
     Quit,
 }
@@ -61,6 +63,7 @@ pub struct Toolbar {
     undo_btn: gtk::Button,
     redo_btn: gtk::Button,
     clear_btn: gtk::Button,
+    copy_region_btn: gtk::Button,
     pass_through_btn: gtk::ToggleButton,
     quit_btn: gtk::Button,
 }
@@ -285,6 +288,25 @@ fn draw_action_icon(ctx: &cairo::Context, icon: ActionIcon, fg: &gtk::gdk::RGBA,
             ctx.line_to(0.44 * s, 0.70 * s);
             ctx.move_to(0.56 * s, 0.42 * s);
             ctx.line_to(0.56 * s, 0.70 * s);
+            let _ = ctx.stroke();
+        }
+        ActionIcon::CopyRegion => {
+            // Viewfinder corners around a dashed selection: crop and copy a region.
+            let (lo, hi, arm) = (0.14 * s, 0.86 * s, 0.22 * s);
+            for (x, y, dx, dy) in [
+                (lo, lo, 1.0, 1.0),
+                (hi, lo, -1.0, 1.0),
+                (lo, hi, 1.0, -1.0),
+                (hi, hi, -1.0, -1.0),
+            ] {
+                ctx.move_to(x + dx * arm, y);
+                ctx.line_to(x, y);
+                ctx.line_to(x, y + dy * arm);
+            }
+            let _ = ctx.stroke();
+            ctx.set_line_width(1.2);
+            ctx.set_dash(&[0.08 * s, 0.07 * s], 0.0);
+            ctx.rectangle(0.34 * s, 0.36 * s, 0.32 * s, 0.28 * s);
             let _ = ctx.stroke();
         }
         ActionIcon::PassThrough => {
@@ -531,7 +553,9 @@ impl Toolbar {
             ActionIcon::PassThrough,
             "Use the desktop, keep the drawing (click again to draw)",
         );
+        let copy_region_btn = make_action_button(ActionIcon::CopyRegion, COPY_REGION_TOOLTIP);
         let mode_group = make_group();
+        mode_group.append(&copy_region_btn);
         mode_group.append(&pass_through_btn);
         let quit_btn = make_action_button(ActionIcon::Quit, "Quit");
         quit_btn.add_css_class("toolbar-danger-btn");
@@ -555,6 +579,7 @@ impl Toolbar {
             undo_btn,
             redo_btn,
             clear_btn,
+            copy_region_btn,
             pass_through_btn,
             quit_btn,
         }
@@ -627,6 +652,10 @@ impl Toolbar {
         self.clear_btn.connect_clicked(move |_| f());
     }
 
+    pub fn connect_copy_region<F: Fn() + 'static>(&self, f: F) {
+        self.copy_region_btn.connect_clicked(move |_| f());
+    }
+
     pub fn connect_quit<F: Fn() + 'static>(&self, f: F) {
         self.quit_btn.connect_clicked(move |_| f());
     }
@@ -671,6 +700,11 @@ impl Toolbar {
                 self.clear_btn.upcast_ref(),
                 "Clear all (Undo brings it back)",
                 keys.clear,
+            ),
+            (
+                self.copy_region_btn.upcast_ref(),
+                COPY_REGION_TOOLTIP,
+                keys.copy_region,
             ),
             (
                 self.pass_through_btn.upcast_ref(),
