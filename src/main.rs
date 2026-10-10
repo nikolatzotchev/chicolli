@@ -650,6 +650,11 @@ impl State {
         });
         // Display above normal windows
         window.set_layer(Layer::Overlay);
+        // Lets compositor rules (e.g. Hyprland's `layerrule`) match the overlays.
+        window.set_namespace(Some("chicolli"));
+        // Cover panels' exclusive zones too, so the overlay spans the whole monitor
+        // and its origin is the monitor's geometry origin the element points assume.
+        window.set_exclusive_zone(-1);
         // Anchors are if the window is pinned to each edge of the output
         let anchors = [
             (gtk4_layer_shell::Edge::Left, true),

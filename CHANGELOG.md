@@ -4,6 +4,15 @@ All notable changes to Chicolli are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- The overlay now covers panels such as waybar instead of stopping at their edge, so
+  you can draw over them and strokes line up across monitors with different panels.
+- The overlays use the layer namespace `chicolli`, so compositor rules such as
+  Hyprland's `layerrule = noanim, chicolli` can match them.
+
 ## [1.0.0] - 2026-10-10
 
 The first stable release.
