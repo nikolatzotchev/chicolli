@@ -49,8 +49,18 @@ src/
 │   └── text_label.rs       # Text label placement and drawing
 └── styles/
     └── style.css           # Transparent window and toolbar CSS
+data/                    # Desktop file and SVG icon, both named after the app ID
+docs/screenshot.png      # README screenshot
+packaging/aur/PKGBUILD   # Arch package built from the release tag
+nixpkgs.nix              # Pinned nixpkgs shared by shell.nix and default.nix
+default.nix              # Nix package (`nix-build`), wraps grim/slurp/wl-copy onto PATH
 shell.nix                # Nix development shell with native build dependencies
+CHANGELOG.md             # Keep a Changelog; release notes are taken from it
 ```
+
+## Releasing
+
+Bump `version` in `Cargo.toml` (and `pkgver` in `packaging/aur/PKGBUILD`), run `cargo update -p chicolli`, add a `## [x.y.z] - date` section to `CHANGELOG.md`, then push a `vx.y.z` tag or run the Release workflow (`.github/workflows/release.yml`) by hand on master. It checks the tag matches `Cargo.toml`, runs the tests, builds the release binary and publishes a GitHub Release with that CHANGELOG section and a tarball of the binary, desktop file and icon.
 
 ## Key Patterns
 

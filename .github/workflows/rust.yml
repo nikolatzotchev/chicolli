@@ -53,3 +53,6 @@ jobs:
 
       - name: Run tests in nix-shell
         run: nix-shell --run "cargo test --locked"
+
+      - name: Build the Nix package
+        run: nix-build

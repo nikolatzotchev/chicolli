@@ -239,3 +239,100 @@ impl DrawingTool for TextLabel {
         Some((Point(x, y), Point(x + w, y + h)))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use gtk::cairo::{Format, ImageSurface};
+
+    use super::*;
+
+    /// Draws `label` on an offscreen surface so it measures its bounds.
+    fn draw(label: &TextLabel) {
+        let surface = ImageSurface::create(Format::ARgb32, 400, 200).unwrap();
+        let ctx = Context::new(&surface).unwrap();
+        label.draw(&ctx);
+    }
+
+    fn placed(text: &str) -> TextLabel {
+        let mut label = TextLabel::new();
+        label.press_mouse(Point(50.0, 50.0));
+        label.release_mouse(Point(50.0, 50.0));
+        label.push_str(text);
+        label
+    }
+
+    #[test]
+    fn click_starts_an_empty_label_for_typing() {
+        let mut label = TextLabel::new();
+        label.press_mouse(Point(10.0, 20.0));
+        assert!(label.is_editing());
+        assert!(label.active());
+        assert!(label.is_empty());
+    }
+
+    #[test]
+    fn typing_and_backspace_edit_the_text() {
+        let mut label = placed("");
+        label.push_char('h');
+        label.push_char('i');
+        assert_eq!(label.text(), "hi");
+        label.pop_char();
+        assert_eq!(label.text(), "h");
+        assert!(!label.is_empty());
+        label.pop_char();
+        label.pop_char();
+        assert!(label.is_empty());
+    }
+
+    #[test]
+    fn paste_keeps_line_breaks_and_drops_other_control_characters() {
+        let label = placed("one\r\ntwo\tthree\u{7}\n");
+        assert_eq!(label.text(), "one\ntwothree\n");
+    }
+
+    #[test]
+    fn commit_ends_editing() {
+        let mut label = placed("done");
+        label.commit();
+        assert!(!label.is_editing());
+        assert!(!label.active());
+    }
+
+    #[test]
+    fn drawn_label_can_be_hit_and_moved() {
+        let mut label = placed("Hello");
+        label.commit();
+        draw(&label);
+        assert!(label.hit(Point(55.0, 50.0)));
+        assert!(!label.hit(Point(390.0, 190.0)));
+
+        label.translate(Point(100.0, 0.0));
+        assert!(label.hit(Point(155.0, 50.0)));
+        assert!(!label.hit(Point(55.0, 50.0)));
+        draw(&label);
+        assert!(label.hit(Point(155.0, 50.0)));
+    }
+
+    #[test]
+    fn grabbing_a_label_drags_it_with_the_pointer() {
+        let mut label = placed("Hello");
+        label.commit();
+        draw(&label);
+        label.edit_and_grab(Point(60.0, 50.0));
+        assert!(label.is_editing());
+        label.motion_notify(Point(160.0, 80.0));
+        label.release_mouse(Point(160.0, 80.0));
+        draw(&label);
+        assert!(label.hit(Point(155.0, 80.0)));
+        assert!(!label.hit(Point(55.0, 50.0)));
+    }
+
+    #[test]
+    fn empty_finished_label_draws_nothing_and_cannot_be_hit() {
+        let mut label = placed("");
+        label.commit();
+        draw(&label);
+        assert!(label.bounds().is_none());
+        assert!(!label.hit(Point(50.0, 50.0)));
+    }
+}
