@@ -2,7 +2,17 @@
 
 Draw on top of your Wayland desktop. Chicolli opens a transparent overlay on every monitor (via [gtk4-layer-shell](https://github.com/wmww/gtk4-layer-shell)) with a pen, arrows, rectangles, a highlighter, text labels and an eraser.
 
+![Chicolli's toolbar over a desktop with a highlight, a box, an arrow and a circled area](docs/screenshot.png)
+
 ## Install
+
+### Packages
+
+- **Release binary:** each [GitHub release](https://github.com/nikolatzotchev/chicolli/releases) has an x86_64 build (needs GTK 4.16+ and gtk4-layer-shell) with the desktop file and icon. Copy `chicolli` onto your `PATH`, the `.desktop` file to `~/.local/share/applications/` and the `.svg` to `~/.local/share/icons/hicolor/scalable/apps/`.
+- **Arch:** [`packaging/aur/PKGBUILD`](packaging/aur/PKGBUILD) builds the tagged release: `makepkg -si` in that directory.
+- **Nix:** `nix-build` (or `nix-env -if .` to install) builds from the checkout with a pinned nixpkgs, and puts `grim`, `slurp` and `wl-copy` on Chicolli's `PATH`.
+
+### From source
 
 You need GTK 4, gtk4-layer-shell, Wayland and pkg-config:
 
@@ -16,6 +26,13 @@ Then build and install:
 
 ```sh
 cargo install --path .
+```
+
+To show Chicolli in app launchers and give its notifications a name and icon, also install the desktop file and icon:
+
+```sh
+install -Dm644 data/io.github.nikolatzotchev.Chicolli.desktop -t ~/.local/share/applications
+install -Dm644 data/io.github.nikolatzotchev.Chicolli.svg -t ~/.local/share/icons/hicolor/scalable/apps
 ```
 
 On GTK older than 4.16 (e.g. Ubuntu 24.04) add `--no-default-features`; the cursors are then drawn at 1x instead of your screen's scale.
@@ -47,7 +64,7 @@ Draw with the left mouse button, pick tools and colors from the toolbar or the k
 | `d` | Pass-through: keep the drawing, use the desktop |
 | `Escape` | Quit (while typing a label, it finishes the label first) |
 
-With the text tool, click to place a label, type, Shift+Enter for a new line, Ctrl+V to paste, and Enter or Escape to finish. Click a label again to move it or keep typing.
+With the text tool, click to place a label, type, Shift+Enter for a new line, Ctrl+V to paste, and Enter or Escape to finish. Click a label again to move it or keep typing. Labels take one character per key, so dead keys and input methods (´ then e, CJK input) don't compose yet; paste such text with Ctrl+V instead.
 
 The eraser rubs out whatever is under it, down to the desktop, and a circle around the pointer shows how much it takes. It is four times the line width, so scroll or use the toolbar's width buttons to resize it. Undo brings back what it erased, and anything drawn afterwards goes on top.
 
@@ -93,6 +110,10 @@ Settings live in `~/.config/chicolli/chicolli.json`, created empty on first run.
 ```
 
 A key is a GTK key name (`"a"`, `"F1"`, `"space"`), optionally with `<Ctrl>`, `<Shift>`, `<Alt>` or `<Super>` in front, like `"<Ctrl><Shift>z"`. An empty string unbinds the action. `line_width` can be 1 to 200. Unknown keys and options, and files that are not valid JSON, are reported on stderr; a broken file keeps the previous settings. Config files from older versions (`draw_keybind`, `line_thickness`, ...) still work.
+
+## Changes
+
+See [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Chicolli
+GenericName=Screen Annotation
+Comment=Draw arrows, boxes, highlights and text on top of your Wayland desktop
+Exec=chicolli
+Icon=io.github.nikolatzotchev.Chicolli
+Terminal=false
+Categories=Graphics;Utility;
+Keywords=draw;annotate;annotation;screen;pen;highlighter;arrow;presentation;
+StartupNotify=false

@@ -1,0 +1,78 @@
+name: Release
+
+# Push a tag like v1.0.0, or run this workflow by hand on a branch to tag the version
+# in its Cargo.toml. Either way it builds the release binary and publishes a GitHub
+# Release with the notes from that version's CHANGELOG.md section.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    container: ghcr.io/gtk-rs/gtk4-rs/gtk4:latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo dnf install -y \
+            rust cargo \
+            gtk4-layer-shell-devel
+
+      - name: Check the tag matches Cargo.toml
+        id: version
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
+          tag="v$version"
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "$tag" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match Cargo.toml version $version" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Release notes from CHANGELOG.md
+        run: |
+          awk -v v="${{ steps.version.outputs.version }}" '
+            /^## / { if (found) exit; if (index($0, "[" v "]")) { found = 1; next } }
+            found { print }
+          ' CHANGELOG.md > notes.md
+          if ! grep -q '[^[:space:]]' notes.md; then
+            echo "CHANGELOG.md has no section for ${{ steps.version.outputs.version }}" >&2
+            exit 1
+          fi
+
+      - name: Tests (locked)
+        run: cargo test --locked
+
+      - name: Release build (locked)
+        run: cargo build --release --locked
+
+      - name: Package
+        run: |
+          name="chicolli-${{ steps.version.outputs.version }}-x86_64-linux"
+          mkdir "$name"
+          cp target/release/chicolli LICENSE README.md CHANGELOG.md "$name"/
+          cp data/io.github.nikolatzotchev.Chicolli.desktop data/io.github.nikolatzotchev.Chicolli.svg "$name"/
+          tar -czf "$name.tar.gz" "$name"
+          sha256sum "$name.tar.gz" > "$name.tar.gz.sha256"
+
+      - name: Publish the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: Chicolli ${{ steps.version.outputs.version }}
+          body_path: notes.md
+          files: |
+            chicolli-*.tar.gz
+            chicolli-*.tar.gz.sha256
